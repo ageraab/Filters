@@ -13,8 +13,8 @@
 const size_t kDefaultNumbersCount = 1000000; // numbers to put into filter
 
 // Bloom filter consts
-const size_t kDefaultBucketsCount = 2000000;
-const size_t kDefaultHashFunctionsCount = 4;
+const size_t kDefaultBucketsCount = 8000000;
+const size_t kDefaultHashFunctionsCount = 6;
 
 // Cuckoo filter consts
 const size_t kDefaultMaxBucketsCount = 1 << 18;
@@ -42,10 +42,10 @@ void AddNumbers(Filter<int>& filter_to_examine, HashSetFilter<int>& correct_filt
     std::cerr << "Put " << numbers_count << " numbers\n";
     size_t size = 0;
     if (filter_to_examine.GetHashTableSizeBits(size)) {
-        std::cerr << "Hash tables size (in bits):   " << size << "\n";
+        std::cerr << "Hash tables size (in bits):  " << size << "\n";
     }
     if (filter_to_examine.GetUsedSpaceBits(size)) {
-        std::cerr << "Really used space (int bits): " << size << "\n";
+        std::cerr << "Really used space (in bits): " << size << "\n";
     }
 }
 

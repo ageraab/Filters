@@ -14,10 +14,7 @@ public:
         buckets_count_ = buckets_count;
         used_space_ = 0;
 
-        filter_.resize(functions_count_);
-        for (size_t i = 0; i < functions_count_; ++i) {
-            filter_[i].resize(buckets_count_);
-        }
+        filter_.resize(buckets_count_);
 
         for (size_t i = 0; i < functions_count_; ++i) {
             hash_functions_.emplace_back(hash_function_builder_(generator));
@@ -27,10 +24,10 @@ public:
     void Add(const T& value) {
         for (size_t i = 0; i < hash_functions_.size(); ++i) {
             int hash = hash_functions_[i](value);
-            if (!filter_[i][hash % buckets_count_]) {
+            if (!filter_[hash % buckets_count_]) {
                 ++used_space_;
             }
-            filter_[i][hash % buckets_count_] = true;
+            filter_[hash % buckets_count_] = true;
         }
     }
 
@@ -41,9 +38,9 @@ public:
     }
 
     bool Find(const T& value) const override {
-        for (size_t i = 0; i < filter_.size(); ++i) {
+        for (size_t i = 0; i < hash_functions_.size(); ++i) {
             int hash = hash_functions_[i](value);
-            if (!filter_[i][hash % buckets_count_]) {
+            if (!filter_[hash % buckets_count_]) {
                 return false;
             }
         }
@@ -51,7 +48,7 @@ public:
     }
 
     bool GetHashTableSizeBits(size_t& size) const override {
-        size = filter_.size() * filter_[0].size();
+        size = filter_.size();
         return true;
     }
 
@@ -61,7 +58,7 @@ public:
     }
 
 private:
-    std::vector<std::vector<bool>> filter_;
+    std::vector<bool> filter_;
     std::vector<LinearHashFunction> hash_functions_;
     HashFunctionBuilder hash_function_builder_;
     size_t functions_count_;
