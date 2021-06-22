@@ -18,7 +18,7 @@ public:
     void Init(size_t fingerprint_size_bits, double buckets_count_coefficient, size_t additional_buckets) {
         fingerprint_size_bits_ = fingerprint_size_bits;
         buckets_count_coefficient_ = buckets_count_coefficient;
-        additional_buckets_ = additional_buckets_;
+        additional_buckets_ = additional_buckets;
     }
 
     void Build(const std::vector<T>& values) override {
