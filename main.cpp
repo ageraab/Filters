@@ -1,3 +1,4 @@
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -29,6 +30,14 @@ const size_t kDefaultAdditionalBuckets = 32;
 const int kMinNumber = -2000000000;
 const int kMaxNumber = 2000000000;
 
+template <class Function>
+void MeasureTime(std::string label, Function f) {
+    auto t1 = std::chrono::high_resolution_clock::now();
+    f();
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::cerr << label << " time: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << " ms\n";
+}
+
 template <class Generator>
 void AddNumbers(Filter<int>& filter_to_examine, HashSetFilter<int>& correct_filter,
                 Generator& generator, size_t numbers_count) {
@@ -36,7 +45,7 @@ void AddNumbers(Filter<int>& filter_to_examine, HashSetFilter<int>& correct_filt
     for (size_t i = 0; i < numbers_count; ++i) {
         numbers.push_back(RandomInt(generator, kMinNumber, kMaxNumber));
     }
-    filter_to_examine.Build(numbers);
+    MeasureTime("Filter build", [&](){filter_to_examine.Build(numbers);});
     correct_filter.Build(numbers);
 
     std::cerr << "Put " << numbers_count << " numbers\n";
@@ -51,18 +60,21 @@ void AddNumbers(Filter<int>& filter_to_examine, HashSetFilter<int>& correct_filt
 
 void CheckExistingNumbers(const Filter<int>& filter_to_examine,
                           const HashSetFilter<int>& correct_filter) {
-    std::cout << "Checking existing numbers (need 100%): ";
     auto numbers = correct_filter.GetHashSet();
     int found = 0;
-    for (const int& x : numbers) {
-        if (filter_to_examine.Find(x)) {
-            ++found;
-        } else {
-            std::cerr << "NOT FOUND " << x << "\n";
+
+    MeasureTime("Checking existing numbers", [&]() {
+        for (const int& x : numbers) {
+            if (filter_to_examine.Find(x)) {
+                ++found;
+            } else {
+                std::cerr << "NOT FOUND " << x << "\n";
+            }
         }
-    }
+    });
 
     double percent_found = 100 * static_cast<double>(found) / numbers.size();
+    std::cout << "Existing numbers check (required 100%): ";
     std::cout << "found " << found << " of " << numbers.size() << " (" << percent_found << "%)\n";
 }
 
@@ -71,20 +83,26 @@ void CheckMissingNumbers(const Filter<int>& filter_to_examine,
                           const HashSetFilter<int>& correct_filter,
                           Generator& generator,
                           size_t numbers_count) {
-    std::cout << "Checking missing numbers (perfect is 0%): ";
-    int checked = 0, found = 0;
-    for (size_t i = 0; i < numbers_count; ++i) {
+    std::vector<int> numbers;
+    while (numbers.size() < numbers_count) {
         int x = RandomInt(generator, kMinNumber, kMaxNumber);
         if (!correct_filter.Find(x)) {
-            ++checked;
+            numbers.push_back(x);
+        }
+    }
+
+    int found = 0;
+    MeasureTime("Checking missing numbers", [&]() {
+        for (const int x : numbers) {
             if (filter_to_examine.Find(x)) {
                 ++found;
             }
         }
-    }
+    });
 
-    double percent_found = 100 * static_cast<double>(found) / checked;
-    std::cout << "found " << found << " of " << checked << " (" << percent_found << "%)\n";
+    double percent_found = 100 * static_cast<double>(found) / numbers.size();
+    std::cout << "Missing numbers check (perfect is 0%): ";
+    std::cout << "found " << found << " of " << numbers.size() << " (" << percent_found << "%)\n";
 }
 
 template <class Generator>
