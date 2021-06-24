@@ -84,8 +84,9 @@ private:
         size_t unique_count = 0;
         for (const auto& x : values) {
             for (size_t i = 0; i < hash_functions_count_; ++i) {
-                if (distribution[CountHash(x, i)].find(x) == distribution[CountHash(x, i)].end()) {
-                    distribution[CountHash(x, i)].insert(x);
+                auto hash = CountHash(x, i);
+                if (distribution[hash].find(x) == distribution[hash].end()) {
+                    distribution[hash].insert(x);
                     if (i == 0) {
                         ++unique_count;
                     }
