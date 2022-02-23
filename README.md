@@ -1,5 +1,5 @@
 # Filters
-2021 coursework: bloom, cuckoo and xor filters implementation.
+2021 coursework: bloom, cuckoo and xor filters implementation
 
 ## Сборка и запуск
 Сборка
