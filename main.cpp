@@ -7,6 +7,7 @@
 
 #include "bloom_filter.h"
 #include "cuckoo_filter.h"
+#include "vacuum_filter.h"
 #include "hash.h"
 #include "hash_set_filter.h"
 #include "xor_filter.h"
@@ -22,6 +23,9 @@ const size_t kDefaultMaxBucketsCount = 1 << 18;
 const size_t kDefaultBucketSize = 4;
 const size_t kDefaultFingerprintSizeBits = 8; // Also for xor filter
 const size_t kDefaultMaxNumKicks = 500;
+
+// Vacuum filter consts
+const size_t kDefaultAlternateRangeLength = 128;
 
 // Xor filter consts
 const double kDefaultBucketsCountCoefficient = 1.23;
@@ -146,6 +150,22 @@ std::unique_ptr<Filter<int>> GetFilter(int argc, char** argv, Generator& generat
         ptr->Init(max_buckets_count, bucket_size, fingerprint_size_bits, max_num_kicks);
         return ptr;
     }
+    if (name == "vacuum") {
+        size_t fingerprint_size_bits = kDefaultFingerprintSizeBits;
+        size_t max_num_kicks = kDefaultMaxNumKicks;
+
+        size_t expected_size = std::stoi(argv[2]);
+        if (argc > 3) {
+            fingerprint_size_bits = std::stoi(argv[3]);
+        }
+        if (argc > 4) {
+            max_num_kicks = std::stoi(argv[4]);
+        }
+
+        auto ptr = std::make_unique<VacuumFilter<int>>();
+        ptr->Init(expected_size, fingerprint_size_bits, max_num_kicks);
+        return ptr;
+    }
     if (name == "xor") {
         size_t fingerprint_size_bits = kDefaultFingerprintSizeBits;
         double buckets_count_coefficient = kDefaultBucketsCountCoefficient;
@@ -173,10 +193,10 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: ./main filter_name items_cnt [filter params]\n";
         std::cerr << "Bloom filter params: [buckets_count] [hash_functions_count]\n";
         std::cerr << "Cuckoo filter params: [max_buckets_count] [bucket_size] [fingerprint_size_bits] [max_num_kicks]\n";
+        std::cerr << "Vacuum filter params: [fingerprint_size_bits] [max_num_kicks]\n";
         std::cerr << "Xor filter params: [fingerprint_size_bits] [buckets_count_coefficient] [additional_buckets]\n";
         return 1;
     }
-    std::string filter_name = argv[1];
 
     size_t numbers_count = kDefaultNumbersCount;
     if (argc > 2) {

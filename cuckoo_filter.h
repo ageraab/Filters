@@ -1,3 +1,5 @@
+#pragma once
+
 #include "compressed_vector.h"
 #include "filter.h"
 #include "hash.h"
@@ -10,33 +12,20 @@ public:
     CuckooFilter() : generator_(1111) {
     }
 
+    virtual ~CuckooFilter() {
+    }
+
     void Init(size_t max_buckets_count, size_t bucket_size,
               size_t fingerprint_size_bits, size_t max_num_kicks) {
-        hash_functions_.clear();
-        fingerprint_size_bits_ = fingerprint_size_bits;
-        max_fingerprint_ = (1ul << fingerprint_size_bits_) - 1;
         buckets_count_ = GetRealBucketsCount(max_buckets_count); // Since buckets count should be a power of 2
         bucket_size_ = bucket_size;
-        max_num_kicks_ = max_num_kicks;
-        size_ = 0;
-        used_space_ = 0;
-
-        // Allocate (fingerprint_size_bits * buckets_count) bits for hash table
-        hash_table_ = CompressedVector<HashTableInt>(buckets_count_ * bucket_size_, fingerprint_size_bits_);
-        // use value (1 << fingerprint_size_bits_) - 1 as empty indicator
-        for (size_t i = 0; i < hash_table_.Size(); ++i) {
-            hash_table_.SetValueByIndex(i, max_fingerprint_);
-        }
-
-        for (size_t i = 0; i < hash_functions_count_; ++i) {
-            hash_functions_.emplace_back(hash_function_builder_(generator_));
-        }
+        CommonInit(fingerprint_size_bits, max_num_kicks);
     }
 
     void Add(const T& value) {
         auto fingerprint = GetFingerPrint(value);
         auto first_hash = hash_functions_[0](value) % buckets_count_;
-        auto second_hash = (first_hash ^ hash_functions_[1](fingerprint)) % buckets_count_;
+        auto second_hash = AlternateBucket(first_hash, fingerprint);
 
         if (TryAddItem(fingerprint, first_hash) || TryAddItem(fingerprint, second_hash)) {
             return;
@@ -54,8 +43,7 @@ public:
             SetHashTableValue(hash_to_replace, bucket_to_replace, fingerprint);
 
             fingerprint = tmp_fingerprint;
-            hash_to_replace ^= hash_functions_[1](fingerprint);
-            hash_to_replace %= buckets_count_;
+            hash_to_replace = AlternateBucket(hash_to_replace, fingerprint);
 
             if (TryAddItem(fingerprint, hash_to_replace)) {
                 return;
@@ -75,7 +63,7 @@ public:
     bool Find(const T& value) const override {
         auto fingerprint = GetFingerPrint(value);
         auto first_hash = hash_functions_[0](value) % buckets_count_;
-        auto second_hash = (first_hash ^ hash_functions_[1](fingerprint)) % buckets_count_;
+        auto second_hash = AlternateBucket(first_hash, fingerprint);
         return FindInHashTable(fingerprint, first_hash) != -1 || FindInHashTable(fingerprint, second_hash) != -1;
     }
 
@@ -89,9 +77,34 @@ public:
         return true;
     }
 
-private:
+protected:
+    void CommonInit(size_t fingerprint_size_bits, size_t max_num_kicks) {
+        hash_functions_.clear();
+        fingerprint_size_bits_ = fingerprint_size_bits;
+        max_fingerprint_ = (1ul << fingerprint_size_bits_) - 1;
+        max_num_kicks_ = max_num_kicks;
+
+        size_ = 0;
+        used_space_ = 0;
+
+        // Allocate (fingerprint_size_bits * buckets_count) bits for hash table
+        hash_table_ = CompressedVector<HashTableInt>(buckets_count_ * bucket_size_, fingerprint_size_bits_);
+        // use value (1 << fingerprint_size_bits_) - 1 as empty indicator
+        for (size_t i = 0; i < hash_table_.Size(); ++i) {
+            hash_table_.SetValueByIndex(i, max_fingerprint_);
+        }
+
+        for (size_t i = 0; i < hash_functions_count_; ++i) {
+            hash_functions_.emplace_back(hash_function_builder_(generator_));
+        }
+    }
+
     HashTableInt GetFingerPrint(const T& x) const {
         return fingerprint_function_(x) % (max_fingerprint_);
+    }
+
+    virtual size_t AlternateBucket(size_t bucket, HashTableInt fingerprint) const {
+        return (bucket ^ hash_functions_[1](fingerprint)) % buckets_count_;
     }
 
     void SetHashTableValue(size_t hash, size_t bucket, HashTableInt value) {
@@ -147,6 +160,8 @@ private:
         while (count <= max_count) {
             count <<= 1;
         }
+        std::cerr << "Buckets count must be a power of 2. Reset buckets count to "
+                  << count / 2 << "\n";
         return count / 2;
     }
 
