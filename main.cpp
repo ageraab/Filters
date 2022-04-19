@@ -6,33 +6,14 @@
 #include <vector>
 
 #include "bloom_filter.h"
+#include "consts.h"
 #include "cuckoo_filter.h"
 #include "vacuum_filter.h"
 #include "hash.h"
 #include "hash_set_filter.h"
+#include "testdata.h"
 #include "xor_filter.h"
 
-const size_t kDefaultNumbersCount = 1000000; // numbers to put into filter
-
-// Bloom filter consts
-const size_t kDefaultBucketsCount = 8000000;
-const size_t kDefaultHashFunctionsCount = 6;
-
-// Cuckoo filter consts
-const size_t kDefaultMaxBucketsCount = 1 << 18;
-const size_t kDefaultBucketSize = 4;
-const size_t kDefaultFingerprintSizeBits = 8; // Also for xor filter
-const size_t kDefaultMaxNumKicks = 500;
-
-// Vacuum filter consts
-const size_t kDefaultAlternateRangeLength = 128;
-
-// Xor filter consts
-const double kDefaultBucketsCountCoefficient = 1.23;
-const size_t kDefaultAdditionalBuckets = 32;
-
-const int kMinNumber = -2000000000;
-const int kMaxNumber = 2000000000;
 
 template <class Function>
 void MeasureTime(std::string label, Function f) {
@@ -42,17 +23,15 @@ void MeasureTime(std::string label, Function f) {
     std::cerr << label << " time: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << " ms\n";
 }
 
-template <class Generator>
-void AddNumbers(Filter<int>& filter_to_examine, HashSetFilter<int>& correct_filter,
-                Generator& generator, size_t numbers_count) {
-    std::vector<int> numbers;
-    for (size_t i = 0; i < numbers_count; ++i) {
-        numbers.push_back(RandomInt(generator, kMinNumber, kMaxNumber));
+template <class T, class Generator>
+void AddItems(Filter<T>& filter_to_examine, TestData<T, Generator>& test_data, size_t items_count) {
+    std::vector<T> items;
+    for (size_t i = 0; i < items_count; ++i) {
+        items.push_back(test_data.NewItem());
     }
-    MeasureTime("Filter build", [&](){filter_to_examine.Build(numbers);});
-    correct_filter.Build(numbers);
+    MeasureTime("Filter build", [&](){filter_to_examine.Build(items);});
 
-    std::cerr << "Put " << numbers_count << " numbers\n";
+    std::cerr << "Put " << items_count << " items\n";
     size_t size = 0;
     if (filter_to_examine.GetHashTableSizeBits(size)) {
         std::cerr << "Hash tables size (in bits):  " << size << "\n";
@@ -62,51 +41,59 @@ void AddNumbers(Filter<int>& filter_to_examine, HashSetFilter<int>& correct_filt
     }
 }
 
-void CheckExistingNumbers(const Filter<int>& filter_to_examine,
-                          const HashSetFilter<int>& correct_filter) {
-    auto numbers = correct_filter.GetHashSet();
+template <class T, class Generator>
+void CheckExistingItems(const Filter<T>& filter_to_examine,
+                        const TestData<T, Generator>& test_data) {
     int found = 0;
+    int items_count = 0;
 
-    MeasureTime("Checking existing numbers", [&]() {
-        for (const int& x : numbers) {
-            if (filter_to_examine.Find(x)) {
+    MeasureTime("Checking existing items", [&]() {
+        for (auto it = test_data.Begin(); it != test_data.End(); ++it) {
+            ++items_count;
+            if (filter_to_examine.Find(*it)) {
                 ++found;
             } else {
-                std::cerr << "NOT FOUND " << x << "\n";
+                std::cerr << "NOT FOUND " << *it << "\n";
             }
         }
     });
 
-    double percent_found = 100 * static_cast<double>(found) / numbers.size();
-    std::cout << "Existing numbers check (required 100%): ";
-    std::cout << "found " << found << " of " << numbers.size() << " (" << percent_found << "%)\n";
+    double percent_found = 100 * static_cast<double>(found) / items_count;
+    std::cout << "Existing itemss check (required 100%): ";
+    std::cout << "found " << found << " of " << items_count << " (" << percent_found << "%)\n";
 }
 
-template <class Generator>
-void CheckMissingNumbers(const Filter<int>& filter_to_examine,
-                          const HashSetFilter<int>& correct_filter,
-                          Generator& generator,
-                          size_t numbers_count) {
-    std::vector<int> numbers;
-    while (numbers.size() < numbers_count) {
-        int x = RandomInt(generator, kMinNumber, kMaxNumber);
-        if (!correct_filter.Find(x)) {
-            numbers.push_back(x);
+template <class T, class Generator>
+void CheckMissingItems(const Filter<T>& filter_to_examine,
+                       const TestData<T, Generator>& test_data,
+                       size_t items_count) {
+    std::vector<int> items;
+    while (items.size() < items_count) {
+        auto x = test_data.GenerateItem();
+        if (!test_data.Contains(x)) {
+            items.push_back(x);
         }
     }
 
     int found = 0;
-    MeasureTime("Checking missing numbers", [&]() {
-        for (const int x : numbers) {
+    MeasureTime("Checking missing items", [&]() {
+        for (const auto& x : items) {
             if (filter_to_examine.Find(x)) {
                 ++found;
             }
         }
     });
 
-    double percent_found = 100 * static_cast<double>(found) / numbers.size();
-    std::cout << "Missing numbers check (perfect is 0%): ";
-    std::cout << "found " << found << " of " << numbers.size() << " (" << percent_found << "%)\n";
+    double percent_found = 100 * static_cast<double>(found) / items.size();
+    std::cout << "Missing items check (perfect is 0%): ";
+    std::cout << "found " << found << " of " << items.size() << " (" << percent_found << "%)\n";
+}
+
+template <class T, class Generator>
+void RunTestCase(Filter<int>& filter, TestData<T, Generator> test_data, size_t numbers_count) {
+    AddItems(filter, test_data, numbers_count);
+    CheckExistingItems(filter, test_data);
+    CheckMissingItems(filter, test_data, numbers_count);
 }
 
 template <class Generator>
@@ -208,7 +195,5 @@ int main(int argc, char** argv) {
     HashSetFilter<int> hash_set_filter;
 
     std::cout << std::fixed << std::setprecision(2);
-    AddNumbers(*filter_to_test, hash_set_filter, generator, numbers_count);
-    CheckExistingNumbers(*filter_to_test, hash_set_filter);
-    CheckMissingNumbers(*filter_to_test, hash_set_filter, generator, numbers_count);
+    RunTestCase(*filter_to_test, TestData<int, UniformIntTestData<std::mt19937>>(generator), numbers_count);
 }
