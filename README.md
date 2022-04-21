@@ -21,8 +21,11 @@ g++ main.cpp -std=c++17  -O2 -o main
 
 ### Тестовые данные:
 `uniform` — случайные целые числа типа int, равномерное распределение.
+
 `zipf` — случайные целые числа типа int, Zipf-Mandelbrot distribution. (https://en.wikipedia.org/wiki/Zipf%E2%80%93Mandelbrot_law)
+
 `text` — случайные строки из строчных латинских букв длиной до 100 символов.
+
 `all` — запустить все вышеперечисленные тесты.
 
 
@@ -30,7 +33,9 @@ g++ main.cpp -std=c++17  -O2 -o main
 ```
 ./main bloom test_data items_cnt [buckets_count] [hash_functions_count]
 ```
+
 `buckets_count` — число элементов в каждом из `hash_functions_count` массивов. (`2000000` по умолчанию)
+
 `hash_functions_count` — число используемых хэш-функций. (`4` по умолчанию)
 
 
