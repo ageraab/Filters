@@ -21,6 +21,16 @@ public:
         return (((static_cast<uint64_t>(number) + prime_) % prime_) * alpha_ + beta_) % prime_;
     }
 
+    uint64_t operator()(const std::string& string) const {
+        uint64_t hash = 0;
+        uint64_t pow = 1;
+        for (const auto c : string) {
+            hash = (hash + static_cast<uint64_t>(c) * pow) % prime_;
+            pow *= alpha_;
+        }
+        return hash;
+    }
+
 private:
     int alpha_;
     int beta_;

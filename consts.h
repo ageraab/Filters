@@ -1,8 +1,23 @@
-//
-// Created by artemy on 17.04.22.
-//
+#pragma once
 
-#ifndef FILTERS_CONSTS_H
-#define FILTERS_CONSTS_H
+const size_t kDefaultNumbersCount = 1000000; // numbers to put into filter
 
-#endif //FILTERS_CONSTS_H
+// Bloom filter consts
+const size_t kDefaultBucketsCount = 8000000;
+const size_t kDefaultHashFunctionsCount = 6;
+
+// Cuckoo filter consts
+const size_t kDefaultMaxBucketsCount = 1 << 18;
+const size_t kDefaultBucketSize = 4;
+const size_t kDefaultFingerprintSizeBits = 8; // Also for xor filter
+const size_t kDefaultMaxNumKicks = 500;
+
+// Vacuum filter consts
+const size_t kDefaultAlternateRangeLength = 128;
+
+// Xor filter consts
+const double kDefaultBucketsCountCoefficient = 1.23;
+const size_t kDefaultAdditionalBuckets = 32;
+
+const int kMinNumber = -2000000000;
+const int kMaxNumber = 2000000000;
