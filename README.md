@@ -1,5 +1,5 @@
 # Filters
-2021 coursework: bloom, cuckoo and xor filters implementation
+2022 Master's thesis & 2021 coursework. Bloom, cuckoo, vacuum and xor filters implementation, several test cases.
 
 ## Сборка и запуск
 Сборка
@@ -7,27 +7,41 @@
 g++ main.cpp -std=c++17  -O2 -o main
 ```
 
-При запуске создается фильтр на основе items_cnt случайных чисел. Проверяется, что все добавленные числа находятся в фильтре (true positive rate == 100%), а затем на основе items_cnt отсутствующих значений оценивается false positive rate.
+При запуске создается фильтр на основе items_cnt случайных объектов, вид которых задается параметром `test_data`. Проверяется, что все добавленные объекты находятся в фильтре (true positive rate == 100%), а затем на основе items_cnt отсутствующих значений оценивается false positive rate.
 ```
-./main filter_name [items_cnt] [filter params]
+./main filter_name [test_data] [items_cnt] [filter params]
 ```
 `filter_name` — название фильтра. (`bloom`, `cuckoo` или `xor`)
 
-`items_cnt` — количество чисел для тестирования. (`1000000` по умолчанию)
+`test_data` — вид данных для тестирования (`uniform`, `zipf`, `text`, `all`)
+
+`items_cnt` — количество объектов для тестирования. (`1000000` по умолчанию)
 
 `filter params` — опциональные параметры фильтров.
 
+### Тестовые данные:
+`uniform` — случайные целые числа типа int, равномерное распределение.
+
+`zipf` — случайные целые числа типа int, Zipf-Mandelbrot distribution. (https://en.wikipedia.org/wiki/Zipf%E2%80%93Mandelbrot_law)
+
+`text` — случайные строки из строчных латинских букв длиной до 100 символов.
+
+`all` — запустить все вышеперечисленные тесты.
+
+
 ### Для фильтра Блума:
 ```
-./main bloom items_cnt [buckets_count] [hash_functions_count]
+./main bloom test_data items_cnt [buckets_count] [hash_functions_count]
 ```
+
 `buckets_count` — число элементов в каждом из `hash_functions_count` массивов. (`2000000` по умолчанию)
+
 `hash_functions_count` — число используемых хэш-функций. (`4` по умолчанию)
 
 
 ### Для фильтра Cuckoo:
 ```
-./main cuckoo items_cnt [max_buckets_count] [bucket_size] [fingerprint_size_bits] [max_num_kicks]
+./main cuckoo test_data items_cnt [max_buckets_count] [bucket_size] [fingerprint_size_bits] [max_num_kicks]
 ```
 `max_buckets_count` — количество бакетов в хэш-таблице будет равно максимальной степени двойки, не превышающей это число. (`2^18` по умолчанию)
 
@@ -42,7 +56,7 @@ g++ main.cpp -std=c++17  -O2 -o main
 
 ### Для Xor-фильтра:
 ```
-./main xor items_cnt [fingerprint_size_bits] [buckets_count_coefficient] [additional_buckets]
+./main xor test_data items_cnt [fingerprint_size_bits] [buckets_count_coefficient] [additional_buckets]
 ```
 `fingerprint_size_bits` — размер fingerprint'а в битах. (`4` по умолчанию)
 
@@ -51,5 +65,15 @@ g++ main.cpp -std=c++17  -O2 -o main
 `additional_buckets` — число дополнительных бакетов (`32` по умолчанию). В итоге, размер хэш таблицы будет равен `items_cnt * buckets_count_coefficient + additional_buckets`
 
 
+### Для Vacuum фильтра:
+```
+./main vacuum test_data items_cnt [fingerprint_size_bits] [max_num_kicks]
+```
+
+`fingerprint_size_bits` — размер fingerprint'а в битах. (`4` по умолчанию)
+
+`max_num_kicks` — максимальное количество перестановок в хэш-таблице при добавлении нового элемента. (`500` по умолчанию)
+
+
 ### Пример запуска:
-`./main cuckoo 75000 50000 4 7` — фильтр cuckoo с 75000 случайными числами, `max_buckets_count = 50000, bucket_size = 4, fingerprint_size_bits = 7, max_num_kicks = 500 (Default)`
+`./main cuckoo all 75000 50000 4 7` — фильтр cuckoo на 75000 объектов, `max_buckets_count = 50000, bucket_size = 4, fingerprint_size_bits = 7, max_num_kicks = 500 (Default)`, запустить все тесты.
