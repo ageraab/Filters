@@ -69,7 +69,7 @@ void CheckMissingItems(const Filter<T>& filter_to_examine,
                        size_t items_count) {
     std::vector<T> items;
     while (items.size() < items_count) {
-        auto x = test_data.GenerateItem();
+        auto x = test_data.GenerateQuery();
         if (!test_data.Contains(x)) {
             items.push_back(x);
         }
@@ -209,12 +209,18 @@ int main(int argc, char** argv) {
 
     if (test_data == "zipf" || test_data == "all") {
         std::unique_ptr<Filter<int>> filter_to_test = GetFilter<int>(argc, argv, generator);
-        ZipfMandelbrotIntTestData<std::mt19937> zm(generator, 1.13, 2.73, 400000);
+        ZipfMandelbrotIntTestData<std::mt19937> zm(generator, 1.13, 2.73, 1000000);
         TestData<int, ZipfMandelbrotIntTestData<std::mt19937>> td(zm);
         RunTestCase(*filter_to_test, td, items_count, "Zipf-mandelbrot distribution for integers");
     }
 
     if (test_data == "text" || test_data == "all") {
+        RandomTextTestData<std::mt19937> g(generator, 5, 100);
+        std::unique_ptr <Filter<std::string>> string_filter = GetFilter<std::string>(argc, argv, generator);
+        RunTestCase(*string_filter, TestData<std::string, RandomTextTestData<std::mt19937>>(g), items_count, "Random strings");
+    }
+
+    if (test_data == "real" || test_data == "all") {
         RandomTextTestData<std::mt19937> g(generator, 5, 100);
         std::unique_ptr <Filter<std::string>> string_filter = GetFilter<std::string>(argc, argv, generator);
         RunTestCase(*string_filter, TestData<std::string, RandomTextTestData<std::mt19937>>(g), items_count, "Random strings");

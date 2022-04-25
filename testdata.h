@@ -13,12 +13,12 @@ public:
     TestData(Generator& generator) : generator_(generator), items_() {
     }
 
-    T GenerateItem() const {
-        return generator_();
+    T GenerateQuery() const {
+        return generator_.SearchQuery();
     }
 
     T NewItem() {
-        T item = GenerateItem();
+        T item = generator_.AddQuery();
         items_.insert(item);
         return item;
     }
@@ -46,7 +46,11 @@ public:
     UniformIntTestData(Rng& rng, int min, int max) : rng_(rng), distribution_(min, max) {
     }
 
-    int operator()() {
+    int AddQuery () {
+        return distribution_(rng_);
+    }
+
+    int SearchQuery () {
         return distribution_(rng_);
     }
 
@@ -59,16 +63,21 @@ template <class Rng>
 class ZipfMandelbrotIntTestData {
 public:
     ZipfMandelbrotIntTestData(Rng& rng, double s, double q, int max)
-        : rng_(rng), distribution_(s, q, max) {
+        : rng_(rng), uniform_(0, std::min(max * 10, kMaxNumber)), zipf_(s, q, max) {
     }
 
-    int operator()() {
-        return distribution_(rng_);
+    int AddQuery () {
+        return uniform_(rng_);
+    }
+
+    int SearchQuery () {
+        return zipf_(rng_);
     }
 
 private:
     Rng& rng_;
-    rng::zipf_mandelbrot_distribution<rng::discrete_distribution_30bit,int> distribution_;
+    std::uniform_int_distribution<int> uniform_;
+    rng::zipf_mandelbrot_distribution<rng::discrete_distribution_30bit,int> zipf_;
 };
 
 template <class Rng>
@@ -78,7 +87,7 @@ public:
         : rng_(rng), length_distribution_(min, max), char_distribution_(0, 'z' - 'a') {
     }
 
-    std::string operator()() {
+    std::string AddQuery () {
         std::string s;
         s.resize(length_distribution_(rng_));
         for (size_t i = 0; i < s.length(); ++i) {
@@ -87,8 +96,16 @@ public:
         return s;
     }
 
+    std::string SearchQuery () {
+        return AddQuery();
+    }
+
 private:
     Rng& rng_;
     std::uniform_int_distribution<int> length_distribution_;
     std::uniform_int_distribution<int> char_distribution_;
+};
+
+class CsvTestData {
+
 };
