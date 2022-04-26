@@ -59,7 +59,7 @@ void CheckExistingItems(const Filter<T>& filter_to_examine,
     });
 
     double percent_found = 100 * static_cast<double>(found) / items_count;
-    std::cout << "Existing itemss check (required 100%): ";
+    std::cout << "Existing items check (required 100%): ";
     std::cout << "found " << found << " of " << items_count << " (" << percent_found << "%)\n";
 }
 
@@ -221,8 +221,9 @@ int main(int argc, char** argv) {
     }
 
     if (test_data == "real" || test_data == "all") {
-        RandomTextTestData<std::mt19937> g(generator, 5, 100);
+        PaymentsCsvParser parser;
+        CsvTestData<std::mt19937, PaymentsCsvParser> g(generator, "data/payments.csv", parser);
         std::unique_ptr <Filter<std::string>> string_filter = GetFilter<std::string>(argc, argv, generator);
-        RunTestCase(*string_filter, TestData<std::string, RandomTextTestData<std::mt19937>>(g), items_count, "Random strings");
+        RunTestCase(*string_filter, TestData<std::string, CsvTestData<std::mt19937, PaymentsCsvParser>>(g), items_count, "Csv data");
     }
 }

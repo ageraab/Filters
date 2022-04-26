@@ -4,6 +4,7 @@
 #include "discrete_distribution.h"
 #include "zipf_mandelbrot.h"
 
+#include <fstream>
 #include <random>
 #include <string>
 
@@ -106,6 +107,62 @@ private:
     std::uniform_int_distribution<int> char_distribution_;
 };
 
-class CsvTestData {
+class PaymentsCsvParser {
+public:
+    void operator()(const std::string& s, std::string& key, bool& value) const {
+        std::stringstream ss;
+        ss << s;
+        std::string part;
+        int counter = 0;
+        while (std::getline(ss, part, ',')) {
+            ++counter;
+            if (counter == 4) {
+                key = part;
+            }
+            if (counter == 3) {
+                value = stof(part) < 10000.0;
+            }
+        }
+    }
+};
 
+template <class Rng, class Parser>
+class CsvTestData {
+public:
+    CsvTestData(Rng& rng, const std::string& filename, const Parser& parser)
+        : rng_(rng), parser_(parser), keys_to_add_(), keys_to_skip_() , add_counter_(0) {
+        std::fstream in;
+        in.open(filename);
+        std::string s;
+        std::string key;
+        bool value;
+        std::getline(in, s);
+        while (std::getline(in, s)) {
+            parser(s, key, value);
+            if (value) {
+                keys_to_add_.push_back(key);
+            } else {
+                keys_to_skip_.push_back(key);
+            }
+        }
+        std::cout << keys_to_add_.size() << " " << keys_to_skip_.size() << "\n";
+        in.close();
+    }
+
+    std::string AddQuery() {
+        add_counter_ = (add_counter_ + 1) % keys_to_add_.size();
+        return keys_to_add_[add_counter_];
+    }
+
+    std::string SearchQuery() {
+        std::uniform_int_distribution<int> uniform(0, keys_to_skip_.size() - 1);
+        return keys_to_skip_[static_cast<size_t>(uniform(rng_))];
+    }
+
+private:
+    Rng& rng_;
+    const Parser& parser_;
+    std::vector<std::string> keys_to_add_;
+    std::vector<std::string> keys_to_skip_;
+    size_t add_counter_;
 };
