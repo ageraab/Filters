@@ -26,7 +26,16 @@ g++ main.cpp -std=c++17  -O2 -o main
 
 `text` — случайные строки из строчных латинских букв длиной до 100 символов.
 
+`real` — реальные данные из датасета https://www.kaggle.com/datasets/rupakroy/online-payments-fraud-detection-dataset?resource=download
+
 `all` — запустить все вышеперечисленные тесты.
+
+Скачать данные для `real` можно так:
+```
+mkdir data
+cd data
+wget https://www.dropbox.com/s/8egso4hut3a5etu/payments.csv
+```
 
 
 ### Для фильтра Блума:
