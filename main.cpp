@@ -11,6 +11,7 @@
 #include "vacuum_filter.h"
 #include "hash.h"
 #include "hash_set_filter.h"
+#include "surf.h"
 #include "testdata.h"
 #include "xor_filter.h"
 
@@ -25,6 +26,7 @@ void MeasureTime(std::string label, Function f) {
 
 template <class T, class Generator>
 void AddItems(Filter<T>& filter_to_examine, TestData<T, Generator>& test_data, size_t items_count) {
+
     std::vector<T> items;
     for (size_t i = 0; i < items_count; ++i) {
         items.push_back(test_data.NewItem());
@@ -174,7 +176,26 @@ std::unique_ptr<Filter<T>> GetFilter(int argc, char** argv, Generator& generator
         ptr->Init(fingerprint_size_bits, buckets_count_coefficient, additional_buckets);
         return ptr;
     }
-    throw "Unknown filter name. Use one of: bloom, cuckoo, xor";
+    if (name == "surf") {
+        SuffixType s_type = SuffixType::Hash;
+        size_t suffix_size = kDefaultSurfSuffixSize;
+        if (argc > 4) {
+            std::string type = argv[4];
+            if (type == "empty" || type == "base") {
+                s_type = SuffixType::Empty;
+            } else if (type == "real") {
+                s_type = SuffixType::Real;
+            }
+        }
+        if (argc > 5) {
+            suffix_size = std::stoi(argv[5]);
+        }
+
+        auto ptr = std::make_unique<SuccinctRangeFilter<T>>();
+        ptr->Init(s_type, suffix_size);
+        return ptr;
+    }
+    throw "Unknown filter name. Use one of: bloom, cuckoo, xor, vacuum, surf";
 }
 
 int main(int argc, char** argv) {
@@ -184,6 +205,7 @@ int main(int argc, char** argv) {
         std::cerr << "Cuckoo filter params: [max_buckets_count] [bucket_size] [fingerprint_size_bits] [max_num_kicks]\n";
         std::cerr << "Vacuum filter params: [fingerprint_size_bits] [max_num_kicks]\n";
         std::cerr << "Xor filter params: [fingerprint_size_bits] [buckets_count_coefficient] [additional_buckets]\n";
+        std::cerr << "SuRF params: [suffix_type] [suffix_size]\n";
         return 1;
     }
 
