@@ -19,5 +19,9 @@ const size_t kDefaultAlternateRangeLength = 128;
 const double kDefaultBucketsCountCoefficient = 1.23;
 const size_t kDefaultAdditionalBuckets = 32;
 
+// SuRF consts
+const size_t kDefaultSurfSuffixSize = 4;
+const unsigned char kTerminator = 0xFF;
+
 const int kMinNumber = -2000000000;
 const int kMaxNumber = 2000000000;
