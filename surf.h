@@ -189,7 +189,7 @@ public:
             ++idx;
         }
 
-        // Print();
+        // DebugPrint();
     }
 
     bool Find(const std::string& key) const {
@@ -212,9 +212,66 @@ public:
         return pos != -1;
     }
 
+    bool FindPrefix(const std::string& prefix) const {
+        int pos = -1;
+        int idx = 0;
+        for (const auto& c : prefix) {
+            if (pos != -1 && !s_has_child_[pos]) {
+                return suffix_type_ != SuffixType::Real || s_values_.MatchSuffix(prefix, idx - 1, pos - s_has_child_.Rank(pos));
+            }
+            pos = Go(pos, c);
+            if (pos == -1) {
+                return false;
+            }
+            ++idx;
+        }
+        if (pos != -1) {
+            return true;
+        }
+        return false;
+    }
+
     std::string LowerBound(const std::string& key) const {
-        // TODO
-        return "";
+        std::string result;
+        int pos = -1;
+        int idx = 0;
+        bool exact_match = true;
+
+        while (pos == -1 || s_has_child_[pos]) {
+            int new_pos = pos;
+            if (exact_match) {
+                if (idx == key.size()) {
+                    break;
+                }
+                new_pos = Go(pos, key[idx], true);
+                if (new_pos == -1) {
+                    while (new_pos == -1) {
+                        if (pos == -1) {
+                            return "";
+                        }
+                        pos = MoveToParent(pos);
+                        --idx;
+                        new_pos = Go(pos, key[idx] + 1, true);
+                    }
+                    exact_match = false;
+                } else if (s_labels_[new_pos] != key[idx]) {
+                    exact_match = false;
+                }
+            } else {
+                new_pos = MoveToChildren(pos);
+            }
+
+            pos = new_pos;
+            if (s_labels_[pos] != kTerminator) {
+                result += s_labels_[pos];
+            }
+            ++idx;
+        }
+        if (exact_match) {
+            return key;
+        }
+
+        return result;
     }
 
     size_t CalculateSize() const {
@@ -224,8 +281,7 @@ public:
         return size;
     }
 
-private:
-    void Print() const {
+    void DebugPrint() const {
         for (size_t i = 0; i < s_has_child_.Size(); ++i) {
             std::cerr << i << " ";
         }
@@ -244,6 +300,7 @@ private:
         std::cerr << "\n\n";
     }
 
+private:
     int MoveToChildren(int parent) const {
         if (parent == -1) {
             return 0;
@@ -254,24 +311,32 @@ private:
         return s_louds_.Select(s_has_child_.Rank(parent) + 1);
     }
 
-    int FindChild(int start, int c) const {
+    int MoveToParent(int child) const {
+        int r = s_louds_.Rank(child);
+        if (r == 1) {
+            return -1;
+        }
+        return s_has_child_.Select(r - 1);
+    }
+
+    int FindChild(int start, int c, bool lower_bound = false) const {
         for (size_t i = start; i < s_labels_.size(); ++i) {
             if (i > start && s_louds_[i]) {
                 return -1;
             }
-            if (s_labels_[i] == c) {
+            if (s_labels_[i] == c || (lower_bound && s_labels_[i] > c)) {
                 return i;
             }
         }
         return -1;
     }
 
-    int Go(int start, char c) const {
+    int Go(int start, char c, bool lower_bound = false) const {
         int children_start = MoveToChildren(start);
         if (children_start == -1) {
             return -1;
         }
-        return FindChild(children_start, c);
+        return FindChild(children_start, c, lower_bound);
     }
 
     std::vector<unsigned char> s_labels_;
@@ -321,6 +386,20 @@ public:
     }
 };
 
+template <class T>
+struct SearchRange {
+    T left;
+    T right;
+
+    SearchRange(const T& l, const T& r) : left(l), right(r) {
+    }
+
+    friend std::ostream& operator <<(std::ostream& out, const SearchRange<T>& range) {
+        out << "[" << range.left << ", " << range.right << "]";
+        return out;
+    }
+};
+
 template <class T, class Converter=DefaultSurfConverter<T>>
 class SuccinctRangeFilter : public Filter<T> {
 public:
@@ -337,6 +416,7 @@ public:
 
         }
         std::sort(strings.begin(), strings.end());
+        strings.erase(std::unique(strings.begin(), strings.end()), strings.end());
         for (size_t i = 0; i < strings.size(); ++i) {
             if (i + 1 < strings.size() && IsSubstr(strings[i], strings[i + 1])) {
                 strings[i].push_back(kTerminator);
@@ -347,6 +427,21 @@ public:
 
     bool Find(const T& value) const override {
         return trie_.Find(converter_.ToString(value));
+    }
+
+    bool FindPrefix(const std::string& value) const {
+        return trie_.FindPrefix(value);
+    }
+
+    bool FindRange(const T& left, const T& right) const {
+        if (left == right) {
+            return Find(left);
+        }
+        return trie_.LowerBound(converter_.ToString(left)) <= converter_.ToString(right);
+    }
+
+    bool FindRange(const SearchRange<T>& range) const {
+        return FindRange(range.left, range.right);
     }
 
     bool GetHashTableSizeBits(size_t& size) const override {

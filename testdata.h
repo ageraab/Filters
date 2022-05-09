@@ -6,7 +6,9 @@
 
 #include <fstream>
 #include <random>
+#include <sstream>
 #include <string>
+#include <unordered_set>
 
 template <class T, class Generator>
 class TestData {
@@ -47,11 +49,11 @@ public:
     UniformIntTestData(Rng& rng, int min, int max) : rng_(rng), distribution_(min, max) {
     }
 
-    int AddQuery () {
+    int AddQuery() {
         return distribution_(rng_);
     }
 
-    int SearchQuery () {
+    int SearchQuery() {
         return distribution_(rng_);
     }
 
@@ -67,11 +69,11 @@ public:
         : rng_(rng), uniform_(0, std::min(max * 10, kMaxNumber)), zipf_(s, q, max) {
     }
 
-    int AddQuery () {
+    int AddQuery() {
         return uniform_(rng_);
     }
 
-    int SearchQuery () {
+    int SearchQuery() {
         return zipf_(rng_);
     }
 
@@ -88,7 +90,7 @@ public:
         : rng_(rng), length_distribution_(min, max), char_distribution_(0, 'z' - 'a') {
     }
 
-    std::string AddQuery () {
+    std::string AddQuery() {
         std::string s;
         s.resize(length_distribution_(rng_));
         for (size_t i = 0; i < s.length(); ++i) {
@@ -97,7 +99,7 @@ public:
         return s;
     }
 
-    std::string SearchQuery () {
+    std::string SearchQuery() {
         return AddQuery();
     }
 
@@ -145,7 +147,6 @@ public:
                 keys_to_skip_.push_back(key);
             }
         }
-        std::cout << keys_to_add_.size() << " " << keys_to_skip_.size() << "\n";
         in.close();
     }
 

@@ -21,7 +21,7 @@ const size_t kDefaultAdditionalBuckets = 32;
 
 // SuRF consts
 const size_t kDefaultSurfSuffixSize = 4;
-const unsigned char kTerminator = 0xFF;
+const char kTerminator = '\0';
 
 const int kMinNumber = -2000000000;
 const int kMaxNumber = 2000000000;
