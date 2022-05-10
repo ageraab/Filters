@@ -123,7 +123,7 @@ void RunLargeTextTest() {
     RandomTextTestData<std::mt19937> g(generator, 1, 15);
     std::uniform_int_distribution<int> distribution(0, 3);
 
-    size_t n = 20000;
+    size_t n = 30000;
     std::vector<std::string> strings(n);
     for (size_t i = 0; i < n; ++i) {
         strings[i] = g.AddQuery();
@@ -220,8 +220,96 @@ void RunLargeTextTest() {
     percent_found = 100 * static_cast<double>(found) / (mbt);
     std::cerr << "Found (true positive) " << found << " of " << mbt << " (" << percent_found << "%)\n";
     percent_found = 100 * static_cast<double>(found_fp) / (mbf);
-    std::cerr << "Found (false positive) " << found_fp << " of " << mbf << " (" << percent_found << "%)\n\n";
+    std::cerr << "Found (false positive) " << found_fp << " of " << mbf << " (" << percent_found << "%)\n\n\n";
 
+}
+
+void RunLargeIntTest() {
+    std::cerr << "Large int test\n";
+    std::mt19937 generator(44);
+    UniformIntTestData<std::mt19937> g(generator, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+    std::uniform_int_distribution<int> distribution(0, 3);
+
+    size_t n = 50000;
+    std::vector<int> values(n);
+    for (size_t i = 0; i < n; ++i) {
+        values[i] = g.AddQuery();
+    }
+    std::sort(values.begin(), values.end());
+    values.erase(std::unique(values.begin(), values.end()), values.end());
+    n = values.size();
+
+    std::vector<bool> in(n, false);
+    std::vector<int> values_to_add;
+    std::vector<int> missing_values;
+
+    for (size_t i = 0; i < n; ++i) {
+        in[i] = distribution(generator) == 0;
+        if (in[i]) {
+            values_to_add.push_back(values[i]);
+        } else {
+            missing_values.push_back(values[i]);
+        }
+    }
+
+    std::cerr << "Build filter for " << values_to_add.size() << " numbers of " << n << "\n\n";
+    auto ptr = std::make_unique<SuccinctRangeFilter<int>>();
+    ptr->Init(s_type, suffix_size);
+    ptr->Build(values_to_add);
+
+    std::cerr << "Checking existing values\n";
+    int found = 0;
+    for (const auto& s : values_to_add) {
+        if (ptr->Find(s)) {
+            ++found;
+        }
+    }
+    double percent_found = 100 * static_cast<double>(found) / values_to_add.size();
+    std::cerr << "Found " << found << " of " << values_to_add.size() << " (" << percent_found << "%)\n\n";
+
+    std::cerr << "Checking missing values\n";
+    found = 0;
+    for (const auto& s : missing_values) {
+        if (ptr->Find(s)) {
+            ++found;
+        }
+    }
+    percent_found = 100 * static_cast<double>(found) / missing_values.size();
+    std::cerr << "Found " << found << " of " << missing_values.size() << " (" << percent_found << "%)\n\n";
+
+    std::cerr << "Checking ranges\n";
+    found = 0;
+    int found_fp = 0;
+    int mbt = 0;
+    int mbf = 0;
+    for (size_t i = 0; i < n - 3; ++i) {
+        bool must_be_true = false;
+        for (size_t j = i; j <= i + 3; ++j) {
+            if (in[j]) {
+                must_be_true = true;
+            }
+        }
+
+        if (must_be_true) {
+            ++mbt;
+        } else {
+            ++mbf;
+        }
+
+        if (ptr->FindRange(values[i], values[i + 3])) {
+            if (must_be_true) {
+                ++found;
+            } else {
+                ++found_fp;
+            }
+        } else if (must_be_true) {
+            std::cerr << "BAD: " << values[i] << " -- " << values[i + 3] << "\n";
+        }
+    }
+    percent_found = 100 * static_cast<double>(found) / (mbt);
+    std::cerr << "Found (true positive) " << found << " of " << mbt << " (" << percent_found << "%)\n";
+    percent_found = 100 * static_cast<double>(found_fp) / (mbf);
+    std::cerr << "Found (false positive) " << found_fp << " of " << mbf << " (" << percent_found << "%)\n\n\n";
 }
 
 int main(int argc, char** argv) {
@@ -243,6 +331,5 @@ int main(int argc, char** argv) {
 
     RunSmallTests();
     RunLargeTextTest();
-
-
+    RunLargeIntTest();
 }

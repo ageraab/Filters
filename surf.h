@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <exception>
 
 #include "compressed_vector.h"
 #include "consts.h"
@@ -125,6 +126,13 @@ public:
         return true;
     }
 
+    char GetSuffix(size_t index) const {
+        if (type_ != SuffixType::Real) {
+            throw "Call GetSuffix for SuffixVector without real suffix";
+        }
+        return static_cast<char>(data_.GetValueByIndex(index));
+    }
+
     size_t DataSizeBits() const {
         return data_.BitsSize();
     }
@@ -232,46 +240,31 @@ public:
     }
 
     std::string LowerBound(const std::string& key) const {
-        std::string result;
         int pos = -1;
         int idx = 0;
-        bool exact_match = true;
-
-        while (pos == -1 || s_has_child_[pos]) {
-            int new_pos = pos;
-            if (exact_match) {
-                if (idx == key.size()) {
+        for (const auto& c : key) {
+            if (pos != -1 && !s_has_child_[pos]) {
+                if (suffix_type_ != SuffixType::Real) {
                     break;
                 }
-                new_pos = Go(pos, key[idx], true);
-                if (new_pos == -1) {
-                    while (new_pos == -1) {
-                        if (pos == -1) {
-                            return "";
-                        }
-                        pos = MoveToParent(pos);
-                        --idx;
-                        new_pos = Go(pos, key[idx] + 1, true);
-                    }
-                    exact_match = false;
-                } else if (s_labels_[new_pos] != key[idx]) {
-                    exact_match = false;
+                auto suf = s_values_.GetSuffix(pos - s_has_child_.Rank(pos));
+                if (suf < c) {
+                    pos = MoveToNext(pos);
                 }
-            } else {
-                new_pos = MoveToChildren(pos);
+                break;
             }
 
+            int new_pos = Go(pos, c, true);
+            if (new_pos == -1) {
+                pos = MoveToNext(pos);
+                break;
+            } else if (s_labels_[new_pos] != c) {
+                pos = MoveToNext(new_pos, true);
+                break;
+            }
             pos = new_pos;
-            if (s_labels_[pos] != kTerminator) {
-                result += s_labels_[pos];
-            }
-            ++idx;
         }
-        if (exact_match) {
-            return key;
-        }
-
-        return result;
+        return RestoreString(pos);
     }
 
     size_t CalculateSize() const {
@@ -339,6 +332,46 @@ private:
         return FindChild(children_start, c, lower_bound);
     }
 
+    int MoveToNext(int pos, bool shift_done = false) const {
+        while (pos != -1) {
+            if (shift_done || (pos + 1 < s_louds_.Size() && !s_louds_[pos + 1])) {
+                if (!shift_done) {
+                    pos = pos + 1;
+                }
+                while (s_has_child_[pos]) {
+                    pos = MoveToChildren(pos);
+                }
+                return pos;
+            }
+            pos = MoveToParent(pos);
+        }
+        return -1;
+    }
+
+    std::string RestoreString(int pos) const {
+        if (pos == -1) {
+            return "";
+        }
+
+        std::string result;
+        if (!s_has_child_[pos] && suffix_type_ == SuffixType::Real) {
+            auto suf = s_values_.GetSuffix(pos - s_has_child_.Rank(pos));
+            if (suf != kTerminator) {
+                result += suf;
+            }
+        }
+        while (pos != -1) {
+            auto suf = s_labels_[pos];
+            if (suf != kTerminator) {
+                result += suf;
+            }
+            pos = MoveToParent(pos);
+        }
+
+        std::reverse(result.begin(), result.end());
+        return result;
+    }
+
     std::vector<unsigned char> s_labels_;
     DummyBitVector s_has_child_;
     DummyBitVector s_louds_;
@@ -370,13 +403,14 @@ template<>
 class DefaultSurfConverter<int> {
 public:
     std::string ToString(int x) const {
-        std::string result(5, '\0');
+        std::string result(6, '\0');
         uint32_t y = static_cast<uint32_t>(x);
-        result[0] = ((y >> 26) & ((1 << 6) - 1)) ^ (1 << 5);
-        result[1] = ((y >> 20) & ((1 << 6) - 1));
-        result[2] = ((y >> 14) & ((1 << 6) - 1));
-        result[3] = ((y >> 7) & ((1 << 7) - 1));
-        result[4] = (y & ((1 << 7) - 1));
+        result[0] = (((y >> 27) & ((1 << 5) - 1)) ^ (1 << 4)) | (1 << 5);
+        result[1] = ((y >> 22) & ((1 << 5) - 1)) | (1 << 5);
+        result[2] = ((y >> 17) & ((1 << 5) - 1)) | (1 << 5);
+        result[3] = ((y >> 12) & ((1 << 5) - 1)) | (1 << 5);
+        result[4] = ((y >> 6) & ((1 << 6) - 1)) | (1 << 6);
+        result[5] = (y & ((1 << 6) - 1)) | (1 << 6);
         return result;
     }
 
