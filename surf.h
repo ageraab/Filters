@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <exception>
 
+#include "bitvector.h"
 #include "compressed_vector.h"
 #include "consts.h"
 #include "filter.h"
@@ -25,55 +26,6 @@ bool IsSubstr(const std::string& a, const std::string& b) {
     }
     return HaveCommonPrefixes(a, b, a.size() - 1);
 }
-
-class DummyBitVector {
-public:
-    DummyBitVector() = default;
-
-    void PushBack(bool x) {
-        data_.push_back(x);
-    }
-
-    bool operator[](size_t i) const {
-        return data_[i];
-    }
-
-    std::vector<bool>::reference operator[](size_t i) {
-        return data_[i];
-    }
-
-    size_t Size() const {
-        return data_.size();
-    }
-
-    int Rank(int pos) const {
-        int rank = 0;
-        for (size_t i = 0; i <= pos && i < data_.size(); ++i) {
-            if (data_[i]) {
-                rank += 1;
-            }
-        }
-        return rank;
-    }
-
-    int Select(int i) const {
-        int cnt = 0;
-        int pos = -1;
-        while (cnt < i) {
-            pos += 1;
-            if (pos >= data_.size()) {
-                return -1;
-            }
-            if (data_[pos]) {
-                cnt += 1;
-            }
-        }
-        return pos;
-    }
-
-private:
-    std::vector<bool> data_;
-};
 
 enum class SuffixType {
     Empty = 0,
@@ -164,6 +116,10 @@ public:
     void Build(const std::vector<std::string>& values) {
         std::vector<bool> done(values.size(), false);
         s_values_ = SuffixVector(suffix_type_, values.size(), suffix_size_);
+
+        std::vector<bool> s_has_child;
+        std::vector<bool> s_louds;
+
         size_t idx = 0;
         bool updated = true;
         while (updated) {
@@ -177,8 +133,8 @@ public:
 
                     if (i == 0 || !HaveCommonPrefixes(values[i - 1], values[i], idx)) {
                         s_labels_.push_back(values[i][idx]);
-                        s_has_child_.PushBack(false);
-                        s_louds_.PushBack(i == 0 || !(idx == 0 || HaveCommonPrefixes(values[i - 1], values[i], idx - 1)));
+                        s_has_child.push_back(false);
+                        s_louds.push_back(i == 0 || !(idx == 0 || HaveCommonPrefixes(values[i - 1], values[i], idx - 1)));
                         if (i == values.size() - 1 || !HaveCommonPrefixes(values[i], values[i + 1], idx)) {
                             s_values_.AddSuffix(values[i], idx);
                             done[i] = true;
@@ -186,7 +142,7 @@ public:
                     }
                     if (!done[i]) {
                         if (idx + 1 < values[i].size()) {
-                            s_has_child_[s_has_child_.Size() - 1] = true;
+                            s_has_child[s_has_child.size() - 1] = true;
                         } else {
                             s_values_.AddSuffix(values[i], idx);
                             done[i] = true;
@@ -196,6 +152,9 @@ public:
             }
             ++idx;
         }
+
+        s_has_child_.Init(s_has_child);
+        s_louds_.Init(s_louds);
 
         // DebugPrint();
     }
@@ -373,8 +332,8 @@ private:
     }
 
     std::vector<unsigned char> s_labels_;
-    DummyBitVector s_has_child_;
-    DummyBitVector s_louds_;
+    BitVector s_has_child_;
+    BitVector s_louds_;
     SuffixVector s_values_;
     SuffixType suffix_type_;
     size_t suffix_size_;
