@@ -47,9 +47,9 @@ public:
         uint32_t value = 0;
         if (type_ == SuffixType::Real) {
             if (pos + 1 < s.size()) {
-                value = static_cast<uint32_t>(s[pos + 1]);
+                value = ToUint32(s[pos + 1]);
             } else {
-                value = static_cast<uint32_t>(kTerminator);
+                value = ToUint32(kTerminator);
             }
         }
         if (type_ == SuffixType::Hash) {
@@ -66,9 +66,9 @@ public:
         if (type_ == SuffixType::Real) {
             uint32_t next_symbol = 0;
             if (pos + 1 < s.size()) {
-                next_symbol = static_cast<uint32_t>(s[pos + 1]);
+                next_symbol = ToUint32(s[pos + 1]);
             } else {
-                next_symbol = static_cast<uint32_t>(kTerminator);
+                next_symbol = ToUint32(kTerminator);
             }
             return data_.GetValueByIndex(index) == next_symbol;
         }
@@ -82,7 +82,7 @@ public:
         if (type_ != SuffixType::Real) {
             throw "Call GetSuffix for SuffixVector without real suffix";
         }
-        return static_cast<char>(data_.GetValueByIndex(index));
+        return FromUint32(data_.GetValueByIndex(index));
     }
 
     size_t DataSizeBits() const {
@@ -90,6 +90,18 @@ public:
     }
 
 private:
+    uint32_t ToUint32(char c, size_t bits = 8) const {
+        uint32_t result = 0;
+        char* ptr = (char*)(&result);
+        ptr[0] = c;
+        result &= (1 << bits) - 1;
+        return result;
+    }
+
+    char FromUint32(uint32_t x) const {
+        return ((char*)(&x))[0];
+    }
+
     CompressedVector<uint32_t> data_;
     std::hash<std::string> hash_;
     size_t item_size_;
@@ -113,7 +125,8 @@ public:
         }
     }
 
-    void Build(const std::vector<std::string>& values) {
+    void Build(const std::vector<std::string>& values, bool use_terminator = true) {
+        use_terminator_ = use_terminator;
         std::vector<bool> done(values.size(), false);
         s_values_ = SuffixVector(suffix_type_, values.size(), suffix_size_);
 
@@ -200,14 +213,13 @@ public:
 
     std::string LowerBound(const std::string& key) const {
         int pos = -1;
-        int idx = 0;
         for (const auto& c : key) {
             if (pos != -1 && !s_has_child_[pos]) {
                 if (suffix_type_ != SuffixType::Real) {
                     break;
                 }
                 auto suf = s_values_.GetSuffix(pos - s_has_child_.Rank(pos));
-                if (suf < c) {
+                if ((c >= 0 && suf >= 0 && c > suf) || (c < 0 && (suf >= 0 || (suf < 0 && c > suf)))) {
                     pos = MoveToNext(pos);
                 }
                 break;
@@ -223,6 +235,7 @@ public:
             }
             pos = new_pos;
         }
+
         return RestoreString(pos);
     }
 
@@ -271,12 +284,14 @@ private:
         return s_has_child_.Select(r - 1);
     }
 
-    int FindChild(int start, int c, bool lower_bound = false) const {
+    int FindChild(int start, char c, bool lower_bound = false) const {
         for (size_t i = start; i < s_labels_.size(); ++i) {
             if (i > start && s_louds_[i]) {
                 return -1;
             }
-            if (s_labels_[i] == c || (lower_bound && s_labels_[i] > c)) {
+            if (s_labels_[i] == c || (lower_bound && (
+                    (c < 0 && s_labels_[i] < 0 && c < s_labels_[i]) || (c >= 0 && (s_labels_[i] < 0 || c < s_labels_[i]))
+                ))) {
                 return i;
             }
         }
@@ -315,13 +330,13 @@ private:
         std::string result;
         if (!s_has_child_[pos] && suffix_type_ == SuffixType::Real) {
             auto suf = s_values_.GetSuffix(pos - s_has_child_.Rank(pos));
-            if (suf != kTerminator) {
+            if (suf != kTerminator || !use_terminator_) {
                 result += suf;
             }
         }
         while (pos != -1) {
             auto suf = s_labels_[pos];
-            if (suf != kTerminator) {
+            if (suf != kTerminator || !use_terminator_) {
                 result += suf;
             }
             pos = MoveToParent(pos);
@@ -331,12 +346,13 @@ private:
         return result;
     }
 
-    std::vector<unsigned char> s_labels_;
+    std::vector<char> s_labels_;
     BitVector s_has_child_;
     BitVector s_louds_;
     SuffixVector s_values_;
     SuffixType suffix_type_;
     size_t suffix_size_;
+    bool use_terminator_;
 };
 
 template <class T>
@@ -362,14 +378,12 @@ template<>
 class DefaultSurfConverter<int> {
 public:
     std::string ToString(int x) const {
-        std::string result(6, '\0');
-        uint32_t y = static_cast<uint32_t>(x);
-        result[0] = (((y >> 27) & ((1 << 5) - 1)) ^ (1 << 4)) | (1 << 5);
-        result[1] = ((y >> 22) & ((1 << 5) - 1)) | (1 << 5);
-        result[2] = ((y >> 17) & ((1 << 5) - 1)) | (1 << 5);
-        result[3] = ((y >> 12) & ((1 << 5) - 1)) | (1 << 5);
-        result[4] = ((y >> 6) & ((1 << 6) - 1)) | (1 << 6);
-        result[5] = (y & ((1 << 6) - 1)) | (1 << 6);
+        std::string result(4, '\0');
+        char* c = (char*)(&x);
+        result[0] = c[3] ^ (1 << 7);
+        result[1] = c[2];
+        result[2] = c[1];
+        result[3] = c[0];
         return result;
     }
 
@@ -404,18 +418,19 @@ public:
 
     void Build(const std::vector<T>& values) override {
         std::vector<std::string> strings;
+        bool used_terminator = false;
         for (const auto& x : values) {
             strings.push_back(converter_.ToString(x));
-
         }
         std::sort(strings.begin(), strings.end());
         strings.erase(std::unique(strings.begin(), strings.end()), strings.end());
         for (size_t i = 0; i < strings.size(); ++i) {
             if (i + 1 < strings.size() && IsSubstr(strings[i], strings[i + 1])) {
+                used_terminator = true;
                 strings[i].push_back(kTerminator);
             }
         }
-        trie_.Build(strings);
+        trie_.Build(strings, used_terminator);
     }
 
     bool Find(const T& value) const override {

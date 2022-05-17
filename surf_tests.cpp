@@ -230,7 +230,7 @@ void RunLargeIntTest() {
     UniformIntTestData<std::mt19937> g(generator, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
     std::uniform_int_distribution<int> distribution(0, 3);
 
-    size_t n = 50000;
+    size_t n = 30000;
     std::vector<int> values(n);
     for (size_t i = 0; i < n; ++i) {
         values[i] = g.AddQuery();
