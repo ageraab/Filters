@@ -27,6 +27,18 @@ bool IsSubstr(const std::string& a, const std::string& b) {
     return HaveCommonPrefixes(a, b, a.size() - 1);
 }
 
+size_t CommonPrefixLength(const std::string& a, const std::string& b) {
+    size_t count = 0;
+    for (size_t i = 0; i < a.size() && i < b.size(); ++i) {
+        if (a[i] == b[i]) {
+            ++count;
+        } else {
+            break;
+        }
+    }
+    return count;
+}
+
 enum class SuffixType {
     Empty = 0,
     Hash = 1,
@@ -37,8 +49,8 @@ class SuffixVector {
 public:
     SuffixVector() = default;
 
-    SuffixVector(SuffixType type, size_t capacity, size_t item_size)
-        : data_(capacity, item_size), hash_(), item_size_(item_size), size_(0), type_(type) {}
+    SuffixVector(SuffixType type, size_t capacity, size_t item_size, bool use_any)
+        : data_(capacity, item_size), hash_(), item_size_(item_size), size_(0), type_(type), use_any_(use_any) {}
 
     void AddSuffix(const std::string& s, size_t pos) {
         if (type_ == SuffixType::Empty) {
@@ -47,9 +59,9 @@ public:
         uint32_t value = 0;
         if (type_ == SuffixType::Real) {
             if (pos + 1 < s.size()) {
-                value = ToUint32(s[pos + 1]);
+                value = ToUint32(s[pos + 1], item_size_);
             } else {
-                value = ToUint32(kTerminator);
+                value = ToUint32(kTerminator, item_size_);
             }
         }
         if (type_ == SuffixType::Hash) {
@@ -59,20 +71,40 @@ public:
         ++size_;
     };
 
+    void AddAnySuffix() {
+        if (!use_any_) {
+            throw "Add any suffix without use_any";
+        }
+        if (type_ == SuffixType::Empty) {
+            return;
+        }
+        uint32_t value = ToUint32(kAnyChar, item_size_);
+        data_.SetValueByIndex(size_, value);
+        ++size_;
+    }
+
     bool MatchSuffix(const std::string& s, size_t pos, size_t index) const {
         if (type_ == SuffixType::Empty) {
             return true;
         }
         if (type_ == SuffixType::Real) {
             uint32_t next_symbol = 0;
-            if (pos + 1 < s.size()) {
-                next_symbol = ToUint32(s[pos + 1]);
-            } else {
-                next_symbol = ToUint32(kTerminator);
+            uint32_t found_symbol = data_.GetValueByIndex(index);
+            if (use_any_ && found_symbol == ToUint32(kAnyChar, item_size_)) {
+                return true;
             }
-            return data_.GetValueByIndex(index) == next_symbol;
+
+            if (pos + 1 < s.size()) {
+                next_symbol = ToUint32(s[pos + 1], item_size_);
+            } else {
+                next_symbol = ToUint32(kTerminator, item_size_);
+            }
+            return found_symbol == next_symbol;
         }
         if (type_ == SuffixType::Hash) {
+            if (use_any_ && ToUint32(kAnyChar, item_size_) == data_.GetValueByIndex(index)) {
+                return true;
+            }
             return hash_(s) % (1 << item_size_) == data_.GetValueByIndex(index);
         }
         return true;
@@ -85,20 +117,29 @@ public:
         return FromUint32(data_.GetValueByIndex(index));
     }
 
+    char GetAny() const {
+        return FromUint32(ToUint32(kAnyChar, item_size_));
+    }
+
     size_t DataSizeBits() const {
         return data_.BitsSize();
     }
 
 private:
+
     uint32_t ToUint32(char c, size_t bits = 8) const {
         uint32_t result = 0;
         char* ptr = (char*)(&result);
         ptr[0] = c;
-        result &= (1 << bits) - 1;
+        result >>= 8 - bits;
         return result;
     }
 
     char FromUint32(uint32_t x) const {
+        // std::cerr << x ;
+        x <<= 8 - item_size_;
+
+        // std::cerr << "->" << x << "->" << (((char*)(&x))[0] | ((1 << (8 - item_size_)) - 1)) << "\n";
         return ((char*)(&x))[0];
     }
 
@@ -107,6 +148,7 @@ private:
     size_t item_size_;
     size_t size_;
     SuffixType type_;
+    bool use_any_;
 };
 
 class FastSuccinctTrie {
@@ -118,17 +160,18 @@ public:
         suffix_type_ = suf_type;
         if (suffix_type_ == SuffixType::Empty) {
             suffix_size_ = 0;
-        } else if (suffix_type_ == SuffixType::Real) {
-            suffix_size_ = 8;
         } else {
             suffix_size_ = suffix_size;
         }
     }
 
-    void Build(const std::vector<std::string>& values, bool use_terminator = true) {
+    void Build(const std::vector<std::string>& values, bool use_terminator = true, int fixed_length = -1, bool use_any = false) {
         use_terminator_ = use_terminator;
+        fixed_length_ = fixed_length;
+        use_any_ = use_any;
+
         std::vector<bool> done(values.size(), false);
-        s_values_ = SuffixVector(suffix_type_, values.size(), suffix_size_);
+        s_values_ = SuffixVector(suffix_type_, values.size(), suffix_size_, use_any_);
 
         std::vector<bool> s_has_child;
         std::vector<bool> s_louds;
@@ -141,6 +184,7 @@ public:
                 if (done[i]) {
                     continue;
                 }
+
                 if (idx < values[i].size()) {
                     updated = true;
 
@@ -155,6 +199,13 @@ public:
                     }
                     if (!done[i]) {
                         if (idx + 1 < values[i].size()) {
+                            if (use_any && idx == fixed_length_) {
+                                if (!HaveCommonPrefixes(values[i], values[i + 1], idx)) {
+                                    s_values_.AddAnySuffix();
+                                }
+                                done[i] = true;
+                                continue;
+                            }
                             s_has_child[s_has_child.size() - 1] = true;
                         } else {
                             s_values_.AddSuffix(values[i], idx);
@@ -219,6 +270,9 @@ public:
                     break;
                 }
                 auto suf = s_values_.GetSuffix(pos - s_has_child_.Rank(pos));
+                if (use_any_ && suf == s_values_.GetAny()) {
+                    break;
+                }
                 if ((c >= 0 && suf >= 0 && c > suf) || (c < 0 && (suf >= 0 || (suf < 0 && c > suf)))) {
                     pos = MoveToNext(pos);
                 }
@@ -330,19 +384,24 @@ private:
         std::string result;
         if (!s_has_child_[pos] && suffix_type_ == SuffixType::Real) {
             auto suf = s_values_.GetSuffix(pos - s_has_child_.Rank(pos));
-            if (suf != kTerminator || !use_terminator_) {
+            if ((suf != kTerminator || !use_terminator_) && (suf != s_values_.GetAny() || !use_any_)) {
                 result += suf;
             }
         }
         while (pos != -1) {
             auto suf = s_labels_[pos];
-            if (suf != kTerminator || !use_terminator_) {
+            if ((suf != kTerminator || !use_terminator_) && (suf != s_values_.GetAny() || !use_any_)) {
                 result += suf;
             }
             pos = MoveToParent(pos);
         }
 
         std::reverse(result.begin(), result.end());
+        if (fixed_length_ != -1) {
+            if (!use_any_ || (result.size() > fixed_length_)) {
+                result.resize(fixed_length_);
+            }
+        }
         return result;
     }
 
@@ -353,13 +412,14 @@ private:
     SuffixType suffix_type_;
     size_t suffix_size_;
     bool use_terminator_;
+    int fixed_length_;
+    bool use_any_;
 };
 
 template <class T>
 class DefaultSurfConverter {
 public:
     std::string ToString(const T& x) const = 0;
-    T ToString(const std::string& s) const = 0;
 };
 
 template<>
@@ -386,11 +446,6 @@ public:
         result[3] = c[0];
         return result;
     }
-
-    int FromString(const std::string& s) const {
-        // TODO
-        return 0;
-    }
 };
 
 template <class T>
@@ -412,25 +467,65 @@ class SuccinctRangeFilter : public Filter<T> {
 public:
     SuccinctRangeFilter() = default;
 
-    void Init(SuffixType suf_type, size_t suffix_size = kDefaultSurfSuffixSize) {
+    void Init(SuffixType suf_type,
+              size_t suffix_size = kDefaultSurfSuffixSize,
+              int fix_length = -1,
+              double cut_gain_threshold = 0.0) {
+        // fix_length = - 1 to always use kTerminator (must not be set if numeric values are stored)
+        // fix_length = 0 to skip kTerminator when all items have the same length
+        // fix_length > 0 to cut all strings to fix_length
         trie_.Init(suf_type, suffix_size);
+        suffix_type_ = suf_type;
+        fix_length_ = fix_length;
+        cut_gain_threshold_ = cut_gain_threshold;
     }
 
     void Build(const std::vector<T>& values) override {
         std::vector<std::string> strings;
         bool used_terminator = false;
+        bool use_any = false;
+        size_t min_length = 0, max_length = 0;
         for (const auto& x : values) {
-            strings.push_back(converter_.ToString(x));
+            auto s = converter_.ToString(x);
+            strings.push_back(s);
+            if (strings.back().size() > max_length) {
+                max_length = strings.back().size();
+            }
+            if (min_length == 0 || strings.back().size() < min_length) {
+                min_length = strings.back().size();
+            }
         }
+        int fixed_length = -1;
+        if ((min_length == max_length) && fix_length_ >= 0) {
+            fixed_length = min_length;
+            if (fix_length_ > 0) {
+                fixed_length == std::min(fix_length_, fixed_length);
+            }
+        }
+        if (fix_length_ > 0 && max_length > fix_length_) {
+            fixed_length = fix_length_;
+            use_any = true;
+        }
+
         std::sort(strings.begin(), strings.end());
         strings.erase(std::unique(strings.begin(), strings.end()), strings.end());
+
         for (size_t i = 0; i < strings.size(); ++i) {
             if (i + 1 < strings.size() && IsSubstr(strings[i], strings[i + 1])) {
                 used_terminator = true;
                 strings[i].push_back(kTerminator);
             }
         }
-        trie_.Build(strings, used_terminator);
+
+        if (cut_gain_threshold_ > 0.0) {
+            if (suffix_type_ == SuffixType::Hash) {
+                std::cerr << "Warning! For suffix_type = 'hash' cut_gain_threshold must be equal to zero. Reset cut_gain_threshold.";
+            } else {
+                PreBuildFilter(strings, cut_gain_threshold_);
+            }
+        }
+
+        trie_.Build(strings, used_terminator, fixed_length, use_any);
     }
 
     bool Find(const T& value) const override {
@@ -461,7 +556,75 @@ public:
         return GetHashTableSizeBits(size);
     }
 
+    void PrintLB(const T& x) const {
+        auto k = converter_.ToString(x);
+        for (const auto& c : k) {
+            std::cerr << static_cast<int>(c) << " ";
+        }
+        std::cerr << "-> ";
+        auto lb = trie_.LowerBound(k);
+        for (const auto& c : lb) {
+            std::cerr << static_cast<int>(c) << " ";
+        }
+        std::cerr << "\n";
+    }
+
 private:
+    void PreBuildFilter(std::vector<std::string>& strings, double threshold) const {
+        if (strings.empty()) {
+            return;
+        }
+        std::vector<int> common_prefixes(strings.size());
+        std::vector<int> left_subtrees(strings.size());
+        std::vector<int> right_subtrees(strings.size());
+        for (size_t i = 0; i < strings.size(); ++i) {
+            if (i + 1 != strings.size()) {
+                common_prefixes[i] = CommonPrefixLength(strings[i], strings[i + 1]);
+            } else {
+                common_prefixes[i] = 0;
+            }
+            if (i == 0) {
+                left_subtrees[i] = common_prefixes[i] + 1;
+            } else {
+                left_subtrees[i] = left_subtrees[i - 1] + 1 + std::max(0, common_prefixes[i] - common_prefixes[i - 1]);
+            }
+        }
+        for (int i = strings.size() - 1; i >= 0; --i) {
+            if (i == strings.size() - 1) {
+                right_subtrees[i] = common_prefixes[i - 1] + 1;
+            } else if (i == 0) {
+                right_subtrees[i] = right_subtrees[i + 1] + 1;
+            } else {
+                right_subtrees[i] = right_subtrees[i + 1] + 1 + std::max(0, common_prefixes[i - 1] - common_prefixes[i]);
+            }
+        }
+        int tree_size = right_subtrees[0];
+
+        for (size_t i = 0; i < strings.size(); ++i) {
+            size_t j = i;
+            while (j < strings.size() - 1 && common_prefixes[j] >= common_prefixes[i] && common_prefixes[j] != 0 && j - i < 20) {
+                ++j;
+                int cp = i == 0 ? 0 : common_prefixes[i - 1];
+                int64_t len = j - i + 1;
+                int cut_gain = left_subtrees[j] + right_subtrees[i] - tree_size - std::max(cp, common_prefixes[j]) - 1;
+                double cf = static_cast<double>(cut_gain) / (len * len);
+                size_t size_after_resize = std::max(cp, common_prefixes[j]) + 2;
+                if (cf > threshold) {
+                    if (strings[i].size() >= size_after_resize && strings[j].size() >= size_after_resize &&
+                        strings[i].substr(0, size_after_resize) == strings[j].substr(0, size_after_resize)) {
+                        for (size_t k = i; k <= j; ++k) {
+                            strings[k].resize(std::max(cp, common_prefixes[j]) + 2);
+                        }
+                    }
+                }
+            }
+        }
+        strings.erase(std::unique(strings.begin(), strings.end()), strings.end());
+    }
+
     FastSuccinctTrie trie_;
     Converter converter_;
+    SuffixType suffix_type_;
+    int fix_length_;
+    double cut_gain_threshold_;
 };

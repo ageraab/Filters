@@ -179,6 +179,9 @@ std::unique_ptr<Filter<T>> GetFilter(int argc, char** argv, Generator& generator
     if (name == "surf") {
         SuffixType s_type = SuffixType::Hash;
         size_t suffix_size = kDefaultSurfSuffixSize;
+        int fixed_length = kDefaultFixedLengthValue;
+        double cut_gain_threshold = kDefaultCutGainThreshold;
+
         if (argc > 4) {
             std::string type = argv[4];
             if (type == "empty" || type == "base") {
@@ -190,9 +193,15 @@ std::unique_ptr<Filter<T>> GetFilter(int argc, char** argv, Generator& generator
         if (argc > 5) {
             suffix_size = std::stoi(argv[5]);
         }
+        if (argc > 6) {
+            fixed_length = std::stoi(argv[6]);
+        }
+        if (argc > 7) {
+            cut_gain_threshold = std::stod(argv[7]);
+        }
 
         auto ptr = std::make_unique<SuccinctRangeFilter<T>>();
-        ptr->Init(s_type, suffix_size);
+        ptr->Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
         return ptr;
     }
     throw "Unknown filter name. Use one of: bloom, cuckoo, xor, vacuum, surf";
@@ -205,7 +214,7 @@ int main(int argc, char** argv) {
         std::cerr << "Cuckoo filter params: [max_buckets_count] [bucket_size] [fingerprint_size_bits] [max_num_kicks]\n";
         std::cerr << "Vacuum filter params: [fingerprint_size_bits] [max_num_kicks]\n";
         std::cerr << "Xor filter params: [fingerprint_size_bits] [buckets_count_coefficient] [additional_buckets]\n";
-        std::cerr << "SuRF params: [suffix_type] [suffix_size]\n";
+        std::cerr << "SuRF params: [suffix_type] [suffix_size] [fix_length] [cut_gain_threshold]\n";
         return 1;
     }
 

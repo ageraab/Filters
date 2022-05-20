@@ -20,8 +20,12 @@ const double kDefaultBucketsCountCoefficient = 1.23;
 const size_t kDefaultAdditionalBuckets = 32;
 
 // SuRF consts
-const size_t kDefaultSurfSuffixSize = 4;
+const size_t kDefaultSurfSuffixSize = 8;
 const char kTerminator = '\0';
+const char kAnyChar = -128;
+
+const int kDefaultFixedLengthValue = 0;
+const double kDefaultCutGainThreshold = 0.0;
 
 const int kMinNumber = -2000000000;
 const int kMaxNumber = 2000000000;

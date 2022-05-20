@@ -9,6 +9,8 @@
 
 SuffixType s_type = SuffixType::Hash;
 size_t suffix_size = kDefaultSurfSuffixSize;
+int fixed_length = 0;
+double cut_gain_threshold = 0.0;
 
 template <class T, class Function>
 void TestQueries(const std::vector<T>& queries, std::vector<T>& found, std::vector<T>& not_found, Function f) {
@@ -45,7 +47,7 @@ void PrintTestResult(const std::string& label, const std::vector<T>& found, cons
 template <class T>
 void RunExactQueriesTest(const std::vector<T>& a, const std::vector<T>& b) {
     auto ptr = std::make_unique<SuccinctRangeFilter<T>>();
-    ptr->Init(s_type, suffix_size);
+    ptr->Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
     ptr->Build(a);
 
     std::vector<T> found;
@@ -61,7 +63,7 @@ void RunRangeQueriesTest(const std::vector<std::string>& a,
                           const std::vector<SearchRange<std::string>>& true_range,
                           const std::vector<SearchRange<std::string>>& false_range) {
     auto ptr = std::make_unique<SuccinctRangeFilter<std::string>>();
-    ptr->Init(s_type, suffix_size);
+    ptr->Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
     ptr->Build(a);
 
     std::vector<SearchRange<std::string>> found;
@@ -75,7 +77,7 @@ void RunRangeQueriesTest(const std::vector<std::string>& a,
 
 void RunPrefixQueriesTest(const std::vector<std::string>& a, const std::vector<std::string>& b) {
     auto ptr = std::make_unique<SuccinctRangeFilter<std::string>>();
-    ptr->Init(s_type, suffix_size);
+    ptr->Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
     ptr->Build(a);
 
     std::vector<std::string> prefix;
@@ -97,6 +99,25 @@ void RunPrefixQueriesTest(const std::vector<std::string>& a, const std::vector<s
 }
 
 void RunSmallTests() {
+    std::vector<std::string> first({
+        "a",
+        "aaaafoo",
+        "aaabaa",
+        "aaababfoo",
+        "aaac",
+        "babcdefga",
+        "babcdefgbfoo",
+        "bacfoo",
+        "ca",
+        "cbfoo",
+        "cca",
+        "ccaa",
+    });
+    SuccinctRangeFilter<std::string> first_filter;
+    first_filter.Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
+    first_filter.Build(first);
+    RunExactQueriesTest(first, std::vector<std::string>());
+    /*
     std::vector<std::string> a({"f", "far", "fas", "fas", "fast", "fat", "s", "top", "toy", "trie", "trip", "try", "fastbiba"});
     std::vector<std::string> b({"", "t", "g", "abs", "sfar", "tfast", "farm", "tooy", "tree", "rip", "tryf", "true", "fastb", "fastboba", "fastbot", "fastbit"});
     std::vector<std::string> b_prefix({"", "m", "fu", "ti", "trick", "true", "fastmm", "fastbmm", "fastbimmm", "fastbibmmm"});
@@ -115,6 +136,7 @@ void RunSmallTests() {
     std::vector<int> e({kMinNumber, -4444, -1, -1, 0, 21, 3352, 5555555, kMaxNumber - 2, kMaxNumber, kMaxNumber});
     std::vector<int> f({kMinNumber + 1, -3333, -2, 1, 20, 229, 3096, kMaxNumber - 256 * 256, kMaxNumber - 1});
     RunExactQueriesTest(e, f);
+     */
 }
 
 void RunLargeTextTest() {
@@ -155,7 +177,7 @@ void RunLargeTextTest() {
 
     std::cerr << "Build filter for " << strings_to_add.size() << " words of " << n << "\n\n";
     auto ptr = std::make_unique<SuccinctRangeFilter<std::string>>();
-    ptr->Init(s_type, suffix_size);
+    ptr->Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
     ptr->Build(strings_to_add);
 
     std::cerr << "Checking existing values\n";
@@ -215,6 +237,7 @@ void RunLargeTextTest() {
             }
         } else if (must_be_true) {
             std::cerr << "BAD: " << strings[i] << " -- " << strings[i + 3] << "\n";
+            ptr->PrintLB(strings[i]);
         }
     }
     percent_found = 100 * static_cast<double>(found) / (mbt);
@@ -230,7 +253,7 @@ void RunLargeIntTest() {
     UniformIntTestData<std::mt19937> g(generator, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
     std::uniform_int_distribution<int> distribution(0, 3);
 
-    size_t n = 30000;
+    size_t n = 60000;
     std::vector<int> values(n);
     for (size_t i = 0; i < n; ++i) {
         values[i] = g.AddQuery();
@@ -254,7 +277,7 @@ void RunLargeIntTest() {
 
     std::cerr << "Build filter for " << values_to_add.size() << " numbers of " << n << "\n\n";
     auto ptr = std::make_unique<SuccinctRangeFilter<int>>();
-    ptr->Init(s_type, suffix_size);
+    ptr->Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
     ptr->Build(values_to_add);
 
     std::cerr << "Checking existing values\n";
@@ -304,6 +327,7 @@ void RunLargeIntTest() {
             }
         } else if (must_be_true) {
             std::cerr << "BAD: " << values[i] << " -- " << values[i + 3] << "\n";
+            ptr->PrintLB(values[i]);
         }
     }
     percent_found = 100 * static_cast<double>(found) / (mbt);
@@ -327,6 +351,12 @@ int main(int argc, char** argv) {
 
     if (argc > 2) {
         suffix_size = std::stoi(argv[2]);
+    }
+    if (argc > 3) {
+        fixed_length = std::stoi(argv[3]);
+    }
+    if (argc > 4) {
+        cut_gain_threshold = std::stod(argv[4]);
     }
 
     RunSmallTests();
