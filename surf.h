@@ -200,7 +200,7 @@ public:
                     if (!done[i]) {
                         if (idx + 1 < values[i].size()) {
                             if (use_any && idx == fixed_length_) {
-                                if (!HaveCommonPrefixes(values[i], values[i + 1], idx)) {
+                                if (i + 1 == values.size() || !HaveCommonPrefixes(values[i], values[i + 1], idx)) {
                                     s_values_.AddAnySuffix();
                                 }
                                 done[i] = true;
@@ -390,7 +390,7 @@ private:
         }
         while (pos != -1) {
             auto suf = s_labels_[pos];
-            if ((suf != kTerminator || !use_terminator_) && (suf != s_values_.GetAny() || !use_any_)) {
+            if (suf != kTerminator || !use_terminator_) {
                 result += suf;
             }
             pos = MoveToParent(pos);
