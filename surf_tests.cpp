@@ -237,7 +237,6 @@ void RunLargeTextTest() {
             }
         } else if (must_be_true) {
             std::cerr << "BAD: " << strings[i] << " -- " << strings[i + 3] << "\n";
-            ptr->PrintLB(strings[i]);
         }
     }
     percent_found = 100 * static_cast<double>(found) / (mbt);
@@ -327,7 +326,6 @@ void RunLargeIntTest() {
             }
         } else if (must_be_true) {
             std::cerr << "BAD: " << values[i] << " -- " << values[i + 3] << "\n";
-            ptr->PrintLB(values[i]);
         }
     }
     percent_found = 100 * static_cast<double>(found) / (mbt);

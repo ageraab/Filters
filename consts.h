@@ -23,6 +23,7 @@ const size_t kDefaultAdditionalBuckets = 32;
 const size_t kDefaultSurfSuffixSize = 8;
 const char kTerminator = '\0';
 const char kAnyChar = -128;
+const size_t kMaxRealSuffixSize = CHAR_BIT;
 
 const int kDefaultFixedLengthValue = 0;
 const double kDefaultCutGainThreshold = 0.0;

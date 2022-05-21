@@ -127,19 +127,16 @@ public:
 
 private:
 
-    uint32_t ToUint32(char c, size_t bits = 8) const {
+    uint32_t ToUint32(char c, size_t bits = kMaxRealSuffixSize) const {
         uint32_t result = 0;
         char* ptr = (char*)(&result);
         ptr[0] = c;
-        result >>= 8 - bits;
+        result >>= kMaxRealSuffixSize - bits;
         return result;
     }
 
     char FromUint32(uint32_t x) const {
-        // std::cerr << x ;
-        x <<= 8 - item_size_;
-
-        // std::cerr << "->" << x << "->" << (((char*)(&x))[0] | ((1 << (8 - item_size_)) - 1)) << "\n";
+        x <<= kMaxRealSuffixSize - item_size_;
         return ((char*)(&x))[0];
     }
 
@@ -270,10 +267,12 @@ public:
                     break;
                 }
                 auto suf = s_values_.GetSuffix(pos - s_has_child_.Rank(pos));
+                auto max_suf = suf | ((1 << (kMaxRealSuffixSize - suffix_size_)) - 1); // c can be in range [suf, max_suf] if it fits
+
                 if (use_any_ && suf == s_values_.GetAny()) {
                     break;
                 }
-                if ((c >= 0 && suf >= 0 && c > suf) || (c < 0 && (suf >= 0 || (suf < 0 && c > suf)))) {
+                if ((c >= 0 && max_suf >= 0 && c > max_suf) || (c < 0 && (max_suf >= 0 || (max_suf < 0 && c > max_suf)))) {
                     pos = MoveToNext(pos);
                 }
                 break;
@@ -474,6 +473,10 @@ public:
         // fix_length = - 1 to always use kTerminator (must not be set if numeric values are stored)
         // fix_length = 0 to skip kTerminator when all items have the same length
         // fix_length > 0 to cut all strings to fix_length
+        if (suf_type == SuffixType::Real && suffix_size > kMaxRealSuffixSize) {
+            std::cerr << "Warning! 8 is the max suffix size supported for real suffixes. Reset suffix_size to 8\n";
+            suffix_size = kMaxRealSuffixSize;
+        }
         trie_.Init(suf_type, suffix_size);
         suffix_type_ = suf_type;
         fix_length_ = fix_length;
@@ -554,19 +557,6 @@ public:
 
     bool GetUsedSpaceBits(size_t& size) const override {
         return GetHashTableSizeBits(size);
-    }
-
-    void PrintLB(const T& x) const {
-        auto k = converter_.ToString(x);
-        for (const auto& c : k) {
-            std::cerr << static_cast<int>(c) << " ";
-        }
-        std::cerr << "-> ";
-        auto lb = trie_.LowerBound(k);
-        for (const auto& c : lb) {
-            std::cerr << static_cast<int>(c) << " ";
-        }
-        std::cerr << "\n";
     }
 
 private:
