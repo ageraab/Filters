@@ -167,3 +167,50 @@ private:
     std::vector<std::string> keys_to_skip_;
     size_t add_counter_;
 };
+
+template <class Rng>
+class WordsTestData {
+public:
+    WordsTestData(Rng& rng, const std::string& filename, double zipf_s, double zipf_q, double misspell_chance = 0.0, int max = 30000)
+            : rng_(rng), zipf_(zipf_s, zipf_q, max), strings_(), misspell_chance_(misspell_chance) {
+        std::fstream in;
+        in.open(filename);
+        std::string s;
+        std::string key;
+        while (std::getline(in, s)) {
+            strings_.push_back(s);
+        }
+        in.close();
+    }
+
+    std::string AddQuery() {
+        std::uniform_int_distribution<uint32_t> word_count_distribution(1, 5);
+        auto words_count = word_count_distribution(rng_);
+        std::string result;
+
+        for (size_t i = 0; i < words_count; ++i) {
+            if (i > 0) {
+                result += " ";
+            }
+            std::string word = strings_[std::min(zipf_(rng_), static_cast<int>(strings_.size() - 1))];
+            std::uniform_real_distribution<> distribution(0, 1);
+            if (distribution(rng_) < misspell_chance_) {
+                std::uniform_int_distribution <uint32_t> pos_distribution(0, word.size() - 1);
+                std::uniform_int_distribution <uint32_t> symbol_distribution(0, 'z' - 'a');
+                word[pos_distribution(rng_)] = 'a' + symbol_distribution(rng_);
+            }
+            result += word;
+        }
+        return result;
+    }
+
+    std::string SearchQuery() {
+        return AddQuery();
+    }
+
+private:
+    Rng& rng_;
+    rng::zipf_mandelbrot_distribution<rng::discrete_distribution_30bit,int> zipf_;
+    std::vector<std::string> strings_;
+    double misspell_chance_;
+};

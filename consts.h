@@ -30,3 +30,5 @@ const double kDefaultCutGainThreshold = 0.0;
 
 const int kMinNumber = -2000000000;
 const int kMaxNumber = 2000000000;
+
+const int kRangeInsertRate = 5;

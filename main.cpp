@@ -92,11 +92,95 @@ void CheckMissingItems(const Filter<T>& filter_to_examine,
 }
 
 template <class T, class Generator>
-void RunTestCase(Filter<T>& filter, TestData<T, Generator> test_data, size_t items_count, const std::string& label) {
+void RunRangeTest(Filter<T>& filter, TestData<T, Generator> test_data, size_t items_count) {
+    std::vector<T> items;
+    std::vector<T> items_to_insert;
+    std::vector<bool> in;
+    std::uniform_int_distribution<int> distribution(0, kRangeInsertRate - 1);
+    std::mt19937 rng(15);
+
+    for (size_t i = 0; i < items_count * kRangeInsertRate; ++i) {
+        auto x = test_data.NewItem();
+        items.push_back(x);
+        in.push_back(false);
+    }
+
+    std::sort(items.begin(), items.end());
+    items.erase(std::unique(items.begin(), items.end()), items.end());
+
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (distribution(rng) == 0) {
+            in[i] = true;
+            items_to_insert.push_back(items[i]);
+        }
+    }
+
+    MeasureTime("Filter build", [&](){filter.Build(items_to_insert);});
+    std::cerr << "Put " << items_to_insert.size() << " items\n";
+
+    size_t size = 0;
+    filter.GetHashTableSizeBits(size);
+    std::cerr << "Filter size (bits): " << size << "\n";
+
+    std::uniform_int_distribution<int> length_distribution(1, kRangeInsertRate * 2 - 1);
+    std::vector<SearchRange<T>> in_ranges;
+    std::vector<SearchRange<T>> out_ranges;
+    while (in_ranges.size() < items_count || out_ranges.size() < items_count) {
+        int length = length_distribution(rng);
+        std::uniform_int_distribution<int> start_distribution(0, items.size() - length - 1);
+        int start_pos = start_distribution(rng);
+        bool is_in = false;
+        for (size_t j = start_pos; j <= start_pos + length; ++j) {
+            if (in[j]) {
+                is_in = true;
+            }
+        }
+        if (is_in) {
+            if (in_ranges.size() < items_count) {
+                in_ranges.emplace_back(items[start_pos], items[start_pos + length]);
+            }
+        } else {
+            if (out_ranges.size() < items_count) {
+                out_ranges.emplace_back(items[start_pos], items[start_pos + length]);
+            }
+        }
+    }
+
+    size_t found = 0;
+    MeasureTime("Checking existing ranges", [&]() {
+        for (const auto& x : in_ranges) {
+            if (filter.FindRange(x)) {
+                ++found;
+            }
+        }
+    });
+    double percent_found = 100 * static_cast<double>(found) / in_ranges.size();
+    std::cout << "Existing ranges check (100% required): ";
+    std::cout << "found " << found << " of " << in_ranges.size() << " (" << percent_found << "%)\n";
+
+    found = 0;
+    MeasureTime("Checking missing ranges", [&]() {
+        for (const auto& x : out_ranges) {
+            if (filter.FindRange(x)) {
+                ++found;
+            }
+        }
+    });
+    percent_found = 100 * static_cast<double>(found) / out_ranges.size();
+    std::cout << "Missing ranges check (0% is perfect): ";
+    std::cout << "found " << found << " of " << out_ranges.size() << " (" << percent_found << "%)\n";
+}
+
+template <class T, class Generator>
+void RunTestCase(Filter<T>& filter, TestData<T, Generator> test_data, size_t items_count, const std::string& label, bool range = false) {
     std::cout << "TEST CASE: " << label << "\n\n";
-    AddItems(filter, test_data, items_count);
-    CheckExistingItems(filter, test_data);
-    CheckMissingItems(filter, test_data, items_count);
+    if (range) {
+        RunRangeTest(filter, test_data, items_count);
+    } else {
+        AddItems(filter, test_data, items_count);
+        CheckExistingItems(filter, test_data);
+        CheckMissingItems(filter, test_data, items_count);
+    }
     std::cout << "_______________________________________\n\n";
 }
 
@@ -176,7 +260,7 @@ std::unique_ptr<Filter<T>> GetFilter(int argc, char** argv, Generator& generator
         ptr->Init(fingerprint_size_bits, buckets_count_coefficient, additional_buckets);
         return ptr;
     }
-    if (name == "surf") {
+    if (name == "surf" || name == "surf_range") {
         SuffixType s_type = SuffixType::Hash;
         size_t suffix_size = kDefaultSurfSuffixSize;
         int fixed_length = kDefaultFixedLengthValue;
@@ -204,7 +288,7 @@ std::unique_ptr<Filter<T>> GetFilter(int argc, char** argv, Generator& generator
         ptr->Init(s_type, suffix_size, fixed_length, cut_gain_threshold);
         return ptr;
     }
-    throw "Unknown filter name. Use one of: bloom, cuckoo, xor, vacuum, surf";
+    throw "Unknown filter name. Use one of: bloom, cuckoo, xor, vacuum, surf, surf_range";
 }
 
 int main(int argc, char** argv) {
@@ -216,6 +300,12 @@ int main(int argc, char** argv) {
         std::cerr << "Xor filter params: [fingerprint_size_bits] [buckets_count_coefficient] [additional_buckets]\n";
         std::cerr << "SuRF params: [suffix_type] [suffix_size] [fix_length] [cut_gain_threshold]\n";
         return 1;
+    }
+
+    bool range = false;
+    std::string filter_name = argv[1];
+    if (filter_name == "surf_range") {
+        range = true;
     }
 
     std::string test_data = "all";
@@ -235,26 +325,38 @@ int main(int argc, char** argv) {
     if (test_data == "uniform" || test_data == "all") {
         std::unique_ptr<Filter<int>> filter_to_test = GetFilter<int>(argc, argv, generator);
         UniformIntTestData<std::mt19937> g(generator, kMinNumber, kMaxNumber);
-        RunTestCase(*filter_to_test, TestData<int, UniformIntTestData<std::mt19937>>(g), items_count, "Uniform distribution for integers");
+        RunTestCase(*filter_to_test, TestData<int, UniformIntTestData<std::mt19937>>(g), items_count, "Uniform distribution for integers", range);
     }
 
     if (test_data == "zipf" || test_data == "all") {
         std::unique_ptr<Filter<int>> filter_to_test = GetFilter<int>(argc, argv, generator);
         ZipfMandelbrotIntTestData<std::mt19937> zm(generator, 1.13, 2.73, 1000000);
         TestData<int, ZipfMandelbrotIntTestData<std::mt19937>> td(zm);
-        RunTestCase(*filter_to_test, td, items_count, "Zipf-mandelbrot distribution for integers");
+        RunTestCase(*filter_to_test, td, items_count, "Zipf-mandelbrot distribution for integers", range);
     }
 
     if (test_data == "text" || test_data == "all") {
         RandomTextTestData<std::mt19937> g(generator, 5, 100);
         std::unique_ptr <Filter<std::string>> string_filter = GetFilter<std::string>(argc, argv, generator);
-        RunTestCase(*string_filter, TestData<std::string, RandomTextTestData<std::mt19937>>(g), items_count, "Random strings");
+        RunTestCase(*string_filter, TestData<std::string, RandomTextTestData<std::mt19937>>(g), items_count, "Random strings", range);
     }
 
     if (test_data == "real" || test_data == "all") {
         PaymentsCsvParser parser;
         CsvTestData<std::mt19937, PaymentsCsvParser> g(generator, "data/payments.csv", parser);
         std::unique_ptr <Filter<std::string>> string_filter = GetFilter<std::string>(argc, argv, generator);
-        RunTestCase(*string_filter, TestData<std::string, CsvTestData<std::mt19937, PaymentsCsvParser>>(g), items_count, "Csv data");
+        RunTestCase(*string_filter, TestData<std::string, CsvTestData<std::mt19937, PaymentsCsvParser>>(g), items_count, "Csv data", range);
+    }
+
+    if (test_data == "words" || test_data == "all") {
+        WordsTestData<std::mt19937> g(generator, "data/words30k.txt", 1.13, 2.73);
+        std::unique_ptr <Filter<std::string>> string_filter = GetFilter<std::string>(argc, argv, generator);
+        RunTestCase(*string_filter, TestData<std::string, WordsTestData<std::mt19937>>(g), items_count, "Words (no misspells)", range);
+    }
+
+    if (test_data == "words_msp" || test_data == "all") {
+        WordsTestData<std::mt19937> g(generator, "data/words30k.txt", 1.13, 2.73, 0.1);
+        std::unique_ptr <Filter<std::string>> string_filter = GetFilter<std::string>(argc, argv, generator);
+        RunTestCase(*string_filter, TestData<std::string, WordsTestData<std::mt19937>>(g), items_count, "Words (with misspells)", range);
     }
 }

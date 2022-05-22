@@ -447,20 +447,6 @@ public:
     }
 };
 
-template <class T>
-struct SearchRange {
-    T left;
-    T right;
-
-    SearchRange(const T& l, const T& r) : left(l), right(r) {
-    }
-
-    friend std::ostream& operator <<(std::ostream& out, const SearchRange<T>& range) {
-        out << "[" << range.left << ", " << range.right << "]";
-        return out;
-    }
-};
-
 template <class T, class Converter=DefaultSurfConverter<T>>
 class SuccinctRangeFilter : public Filter<T> {
 public:
