@@ -37,6 +37,7 @@ void AddItems(Filter<T>& filter_to_examine, TestData<T, Generator>& test_data, s
     size_t size = 0;
     if (filter_to_examine.GetHashTableSizeBits(size)) {
         std::cout << "Hash tables size (in bits):  " << size << "\n";
+        std::cout << "Bits per item: " << static_cast<double>(size) / items_count << "\n";
     }
     if (filter_to_examine.GetUsedSpaceBits(size)) {
         std::cout << "Really used space (in bits): " << size << "\n";
@@ -121,6 +122,7 @@ void RunRangeTest(Filter<T>& filter, TestData<T, Generator> test_data, size_t it
     size_t size = 0;
     filter.GetHashTableSizeBits(size);
     std::cerr << "Filter size (bits): " << size << "\n";
+    std::cout << "Bits per item: " << static_cast<double>(size) / items_to_insert.size() << "\n";
 
     std::uniform_int_distribution<int> length_distribution(1, kRangeInsertRate * 2 - 1);
     std::vector<SearchRange<T>> in_ranges;
